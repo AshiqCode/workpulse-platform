@@ -77,7 +77,7 @@ export function ProjectCard({ project, onSelect }: ProjectCardProps) {
               </span>
 
               {/* Admin Action Menu for CRUD */}
-              {currentUser.role === 'admin' && (
+              {currentUser?.role === 'admin' && (
                 <div className="relative">
                   <button
                     onClick={(e) => {

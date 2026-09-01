@@ -9,17 +9,15 @@ import { WorkLogTable } from '@/components/dashboard/WorkLogTable';
 import { AnalyticsChart } from '@/components/dashboard/AnalyticsChart';
 import { InviteDeveloperModal } from '@/components/modals/InviteDeveloperModal';
 import { CreateProjectModal } from '@/components/modals/CreateProjectModal';
-import { PaywallModal } from '@/components/modals/PaywallModal';
 import { PaywallGate } from '@/components/layout/PaywallGate';
 import { useApp } from '@/lib/auth-context';
 import { Plus, Users, ArrowUpRight, FolderPlus } from 'lucide-react';
 import Link from 'next/link';
 
 export default function AdminDashboardPage() {
-  const { isPaidAdmin, projects, currentUser } = useApp();
+  const { projects } = useApp();
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [isProjectOpen, setIsProjectOpen] = useState(false);
-  const [isPaywallOpen, setIsPaywallOpen] = useState(false);
 
   return (
     <PaywallGate>
@@ -33,7 +31,6 @@ export default function AdminDashboardPage() {
           <Navbar
             onOpenInviteModal={() => setIsInviteOpen(true)}
             onOpenProjectModal={() => setIsProjectOpen(true)}
-            onOpenPaywallModal={() => setIsPaywallOpen(true)}
           />
 
           {/* Dashboard Main View */}
@@ -90,7 +87,7 @@ export default function AdminDashboardPage() {
                   ))}
                 </div>
               ) : (
-                <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center">
+                <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center">
                   <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 mb-3">
                     <FolderPlus className="h-6 w-6" />
                   </div>
@@ -125,7 +122,6 @@ export default function AdminDashboardPage() {
         {/* Modals */}
         <InviteDeveloperModal isOpen={isInviteOpen} onClose={() => setIsInviteOpen(false)} />
         <CreateProjectModal isOpen={isProjectOpen} onClose={() => setIsProjectOpen(false)} />
-        <PaywallModal isOpen={isPaywallOpen} onClose={() => setIsPaywallOpen(false)} />
       </div>
     </PaywallGate>
   );

@@ -2,14 +2,25 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { UserProfile, UserRole, Project, WorkReport, DashboardStats, ProjectStatus } from '@/types';
-import { INITIAL_PROFILES, INITIAL_PROJECTS, INITIAL_WORK_LOGS, INITIAL_STATS } from './mock-data';
+import { ADMIN_USER, INITIAL_PROJECTS, INITIAL_WORK_LOGS, INITIAL_STATS } from './mock-data';
+
+interface AuthResult {
+  success: boolean;
+  role?: UserRole;
+  error?: string;
+}
 
 interface AppContextType {
-  currentUser: UserProfile;
-  setCurrentUser: (user: UserProfile) => void;
+  currentUser: UserProfile | null;
+  setCurrentUser: (user: UserProfile | null) => void;
+  isAuthenticated: boolean;
+  adminProfile: UserProfile;
+  login: (email: string, password: string) => AuthResult;
+  signup: (email: string, password: string, fullName: string) => AuthResult;
+  logout: () => void;
   switchUser: (role: UserRole, id?: string) => void;
-  isPaidAdmin: boolean;
-  setIsPaidAdmin: (paid: boolean) => void;
+  updateAdminProfile: (updates: Partial<UserProfile>) => void;
+  invitedEmails: string[];
   projects: Project[];
   setProjects: React.Dispatch<React.SetStateAction<Project[]>>;
   workReports: WorkReport[];
@@ -28,9 +39,13 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  const [adminProfile, setAdminProfile] = useState<UserProfile>(ADMIN_USER);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(ADMIN_USER); // Logged in as Admin by default for convenience
   const [developers, setDevelopers] = useState<UserProfile[]>([]);
-  const [currentUser, setCurrentUser] = useState<UserProfile>(INITIAL_PROFILES[0]);
-  const [isPaidAdmin, setIsPaidAdmin] = useState<boolean>(false); // Strict unpaid default until $62 is paid
+  const [invitedEmails, setInvitedEmails] = useState<string[]>([
+    'demo.dev@workpulse.io',
+    'sarah.dev@workpulse.io'
+  ]);
   const [projects, setProjects] = useState<Project[]>(INITIAL_PROJECTS);
   const [workReports, setWorkReports] = useState<WorkReport[]>(INITIAL_WORK_LOGS);
   const [stats, setStats] = useState<DashboardStats>(INITIAL_STATS);
@@ -54,19 +69,122 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, [projects, workReports, developers]);
 
+  const login = (email: string, password: string): AuthResult => {
+    const cleanEmail = email.trim().toLowerCase();
+
+    // 1. Admin Login Check
+    if (cleanEmail === 'muhammadashiq.dev@gmail.com') {
+      if (password === 'krazy8' || password === adminProfile.password) {
+        setCurrentUser(adminProfile);
+        return { success: true, role: 'admin' };
+      } else {
+        return { success: false, error: 'Incorrect admin password. (Default is krazy8)' };
+      }
+    }
+
+    // 2. Developer Login Check - MUST BE INVITED BY ADMIN
+    const isInvited = invitedEmails.map((e) => e.toLowerCase()).includes(cleanEmail);
+    const existingDev = developers.find((d) => d.email.toLowerCase() === cleanEmail);
+
+    if (!isInvited && !existingDev) {
+      return {
+        success: false,
+        error:
+          'Access Denied: You must be invited by the Administrator (muhammadashiq.dev@gmail.com) to access the developer portal.',
+      };
+    }
+
+    if (existingDev) {
+      if (existingDev.password && existingDev.password !== password) {
+        return { success: false, error: 'Incorrect developer password.' };
+      }
+      setCurrentUser(existingDev);
+      return { success: true, role: 'developer' };
+    }
+
+    // If invited but hasn't created a password yet, create dev profile
+    const newDev: UserProfile = {
+      id: `dev-${Date.now()}`,
+      email: cleanEmail,
+      full_name: cleanEmail.split('@')[0].replace('.', ' ').replace(/\b\w/g, (l) => l.toUpperCase()),
+      role: 'developer',
+      avatar_url: `https://images.unsplash.com/photo-1535713875002?w=150`,
+      is_invited: true,
+      password: password,
+      assigned_projects_count: 0,
+      on_time_rate_pct: 100,
+      total_hours_logged: 0,
+    };
+
+    setDevelopers((prev) => [...prev, newDev]);
+    setCurrentUser(newDev);
+    return { success: true, role: 'developer' };
+  };
+
+  const signup = (email: string, password: string, fullName: string): AuthResult => {
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (cleanEmail === 'muhammadashiq.dev@gmail.com') {
+      const updated = { ...adminProfile, full_name: fullName, password };
+      setAdminProfile(updated);
+      setCurrentUser(updated);
+      return { success: true, role: 'admin' };
+    }
+
+    // Developer signup - verify invitation
+    const isInvited = invitedEmails.map((e) => e.toLowerCase()).includes(cleanEmail);
+    if (!isInvited) {
+      return {
+        success: false,
+        error:
+          'Registration Denied: This email has not been invited by the Administrator (muhammadashiq.dev@gmail.com). Ask your admin to send an invitation first.',
+      };
+    }
+
+    const newDev: UserProfile = {
+      id: `dev-${Date.now()}`,
+      email: cleanEmail,
+      full_name: fullName,
+      role: 'developer',
+      avatar_url: `https://images.unsplash.com/photo-${1535713875002 + Math.floor(Math.random() * 1000)}?w=150`,
+      is_invited: true,
+      password: password,
+      assigned_projects_count: 0,
+      on_time_rate_pct: 100,
+      total_hours_logged: 0,
+    };
+
+    setDevelopers((prev) => [...prev.filter((d) => d.email.toLowerCase() !== cleanEmail), newDev]);
+    setCurrentUser(newDev);
+    return { success: true, role: 'developer' };
+  };
+
+  const logout = () => {
+    setCurrentUser(null);
+  };
+
   const switchUser = (role: UserRole, id?: string) => {
     if (role === 'admin') {
-      setCurrentUser({ ...INITIAL_PROFILES[0], is_paid_admin: isPaidAdmin });
+      setCurrentUser(adminProfile);
     } else {
       const dev = developers.find((d) => (id ? d.id === id : true)) || developers[0] || {
         id: 'guest-dev',
         email: 'developer@example.com',
         full_name: 'Developer Member',
-        role: 'developer',
-        is_paid_admin: false,
+        role: 'developer' as const,
       };
       setCurrentUser(dev);
     }
+  };
+
+  const updateAdminProfile = (updates: Partial<UserProfile>) => {
+    setAdminProfile((prev) => {
+      const updated = { ...prev, ...updates, updated_at: new Date().toISOString() };
+      if (currentUser?.role === 'admin') {
+        setCurrentUser(updated);
+      }
+      return updated;
+    });
   };
 
   const addProject = (newProj: Omit<Project, 'id' | 'created_at'>) => {
@@ -108,18 +226,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const inviteDeveloper = (email: string, fullName: string) => {
+    const cleanEmail = email.trim().toLowerCase();
+    setInvitedEmails((prev) => (prev.includes(cleanEmail) ? prev : [...prev, cleanEmail]));
+
     const newDev: UserProfile = {
       id: `dev-${Date.now()}`,
-      email,
+      email: cleanEmail,
       full_name: fullName,
       role: 'developer',
       avatar_url: `https://images.unsplash.com/photo-${1535713875002 + Math.floor(Math.random() * 10000)}?w=150`,
-      is_paid_admin: false,
+      is_invited: true,
       assigned_projects_count: 0,
       on_time_rate_pct: 100,
       total_hours_logged: 0,
     };
-    setDevelopers((prev) => [...prev, newDev]);
+
+    setDevelopers((prev) => [...prev.filter((d) => d.email.toLowerCase() !== cleanEmail), newDev]);
   };
 
   const submitReport = (reportData: Omit<WorkReport, 'id' | 'report_date' | 'submitted_at' | 'status' | 'is_on_time'>): boolean => {
@@ -131,15 +253,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const isOnTime = currentHour < 17 || (currentHour === 17 && currentMin <= 15);
     const targetProject = projects.find((p) => p.id === reportData.project_id);
 
+    const devName = currentUser?.full_name || 'Developer Member';
+    const devAvatar = currentUser?.avatar_url || 'https://images.unsplash.com/photo-1535713875002?w=150';
+    const devId = currentUser?.id || `dev-${Date.now()}`;
+    const devEmail = currentUser?.email || 'developer@example.com';
+
     const newReport: WorkReport = {
       ...reportData,
       id: `report-${Date.now()}`,
       project_name: targetProject?.name || 'Project Assignment',
       client_name: targetProject?.client_name || 'Client',
-      developer_id: currentUser.id,
-      developer_name: currentUser.full_name,
-      developer_avatar: currentUser.avatar_url,
-      developer_email: currentUser.email,
+      developer_id: devId,
+      developer_name: devName,
+      developer_avatar: devAvatar,
+      developer_email: devEmail,
       report_date: now.toISOString().split('T')[0],
       scheduled_time: targetProject?.scheduled_report_time || '5:00 PM PST',
       submitted_at: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -152,7 +279,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // Update developer stats
     setDevelopers((prev) =>
       prev.map((d) =>
-        d.id === currentUser.id
+        d.id === devId
           ? {
               ...d,
               total_hours_logged: (d.total_hours_logged || 0) + reportData.time_spent_hours,
@@ -169,9 +296,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       value={{
         currentUser,
         setCurrentUser,
+        isAuthenticated: !!currentUser,
+        adminProfile,
+        login,
+        signup,
+        logout,
         switchUser,
-        isPaidAdmin,
-        setIsPaidAdmin,
+        updateAdminProfile,
+        invitedEmails,
         projects,
         setProjects,
         workReports,

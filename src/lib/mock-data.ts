@@ -1,15 +1,17 @@
 import { UserProfile, Project, WorkReport, DashboardStats } from '@/types';
 
-export const INITIAL_PROFILES: UserProfile[] = [
-  {
-    id: 'admin-primary-001',
-    email: 'admin@workpulse.io',
-    full_name: 'Platform Admin',
-    role: 'admin',
-    avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
-    is_paid_admin: false, // Default unpaid until $62 is paid
-  }
-];
+export const ADMIN_USER: UserProfile = {
+  id: '00000000-0000-0000-0000-000000000001',
+  email: 'muhammadashiq.dev@gmail.com',
+  full_name: 'Muhammad Ashiq',
+  role: 'admin',
+  avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+  company: 'Ashiq Dev Studio',
+  bio: 'Lead Engineer & Project Administrator',
+  password: 'krazy8',
+};
+
+export const INITIAL_PROFILES: UserProfile[] = [ADMIN_USER];
 
 export const INITIAL_PROJECTS: Project[] = [];
 

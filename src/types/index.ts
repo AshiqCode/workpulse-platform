@@ -10,12 +10,13 @@ export interface UserProfile {
   full_name: string;
   role: UserRole;
   avatar_url?: string;
-  is_paid_admin: boolean;
-  stripe_customer_id?: string;
-  stripe_session_id?: string;
+  bio?: string;
+  company?: string;
+  is_invited?: boolean;
+  password?: string;
   created_at?: string;
   updated_at?: string;
-  // Computed fields
+  // Computed stats
   assigned_projects_count?: number;
   on_time_rate_pct?: number;
   total_hours_logged?: number;
@@ -77,16 +78,6 @@ export interface Invitation {
   status: 'pending' | 'accepted' | 'expired';
   created_at: string;
   expires_at?: string;
-}
-
-export interface PaymentRecord {
-  id: string;
-  user_id?: string;
-  stripe_session_id: string;
-  amount_cents: number; // 6200
-  currency: string; // 'usd'
-  status: string;
-  created_at: string;
 }
 
 export interface DashboardStats {

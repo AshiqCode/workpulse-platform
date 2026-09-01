@@ -6,10 +6,10 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { PaywallGate } from '@/components/layout/PaywallGate';
 import { InviteDeveloperModal } from '@/components/modals/InviteDeveloperModal';
 import { useApp } from '@/lib/auth-context';
-import { Users, UserPlus } from 'lucide-react';
+import { UserPlus, Shield, User } from 'lucide-react';
 
 export default function TeamPage() {
-  const { developers, isPaidAdmin } = useApp();
+  const { developers, adminProfile } = useApp();
   const [isInviteOpen, setIsInviteOpen] = useState(false);
 
   return (
@@ -24,7 +24,7 @@ export default function TeamPage() {
               <div>
                 <h1 className="text-2xl font-black tracking-tight text-slate-900">Team Structure & Permissions</h1>
                 <p className="text-xs font-medium text-slate-500 mt-1">
-                  Role permissions and developer team organization.
+                  Manage invited developers and review role permissions.
                 </p>
               </div>
 
@@ -41,21 +41,21 @@ export default function TeamPage() {
               <h2 className="text-base font-bold text-slate-900 mb-4">Active Team Members ({developers.length + 1})</h2>
 
               <div className="divide-y divide-slate-100">
-                {/* Admin */}
+                {/* Admin Muhammad Ashiq */}
                 <div className="flex items-center justify-between py-3.5">
                   <div className="flex items-center gap-3">
                     <img
-                      src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150"
-                      alt="Platform Admin"
-                      className="h-9 w-9 rounded-full object-cover border border-amber-300"
+                      src={adminProfile.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
+                      alt={adminProfile.full_name}
+                      className="h-10 w-10 rounded-full object-cover border-2 border-blue-500 shadow-xs"
                     />
                     <div>
-                      <p className="text-xs font-bold text-slate-900">Platform Admin (You)</p>
-                      <p className="text-[11px] text-slate-500">admin@workpulse.io</p>
+                      <p className="text-xs font-bold text-slate-900">{adminProfile.full_name} (Owner)</p>
+                      <p className="text-[11px] text-slate-500">{adminProfile.email}</p>
                     </div>
                   </div>
-                  <span className="rounded-full bg-amber-50 border border-amber-200 px-3 py-0.5 text-[11px] font-bold text-amber-800">
-                    Administrator ($62 Pro)
+                  <span className="rounded-full bg-blue-50 border border-blue-200 px-3 py-0.5 text-[11px] font-bold text-blue-800">
+                    Administrator
                   </span>
                 </div>
 
@@ -66,15 +66,15 @@ export default function TeamPage() {
                       <img
                         src={dev.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'}
                         alt={dev.full_name}
-                        className="h-9 w-9 rounded-full object-cover"
+                        className="h-10 w-10 rounded-full object-cover"
                       />
                       <div>
                         <p className="text-xs font-bold text-slate-900">{dev.full_name}</p>
                         <p className="text-[11px] text-slate-500">{dev.email}</p>
                       </div>
                     </div>
-                    <span className="rounded-full bg-blue-50 border border-blue-200 px-3 py-0.5 text-[11px] font-bold text-blue-700">
-                      Developer (Free Member)
+                    <span className="rounded-full bg-emerald-50 border border-emerald-200 px-3 py-0.5 text-[11px] font-bold text-emerald-700">
+                      Invited Developer
                     </span>
                   </div>
                 ))}

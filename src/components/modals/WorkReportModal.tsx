@@ -36,7 +36,7 @@ export function WorkReportModal({ isOpen, onClose, defaultProjectId }: WorkRepor
       pr_commit_links: prLinks,
       blockers: blockers,
       tomorrow_plan: tomorrowPlan,
-      developer_id: currentUser.id,
+      developer_id: currentUser?.id || 'dev-anon',
     });
 
     // Trigger celebratory confetti
