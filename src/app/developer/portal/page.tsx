@@ -8,24 +8,24 @@ import {
   Calendar,
   Send,
   GitPullRequest,
-  CheckSquare,
-  Square,
-  Flame,
   Activity,
   ArrowLeft,
   Sparkles,
   ChevronRight,
   FileText,
   UserCheck,
-  User as UserIcon,
-  LogOut
+  LogOut,
+  Eye,
+  ShieldCheck
 } from 'lucide-react';
 import { useApp } from '@/lib/auth-context';
 import { WorkReportModal } from '@/components/modals/WorkReportModal';
 import { PaywallGate } from '@/components/layout/PaywallGate';
 import { AdminProfileModal } from '@/components/modals/AdminProfileModal';
+import { ViewReportModal } from '@/components/modals/ViewReportModal';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { useRouter } from 'next/navigation';
+import { WorkReport } from '@/types';
 
 export default function DeveloperPortalPage() {
   const router = useRouter();
@@ -33,14 +33,8 @@ export default function DeveloperPortalPage() {
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const [viewingReport, setViewingReport] = useState<WorkReport | null>(null);
   const [currentTime, setCurrentTime] = useState<string>('');
-
-  // Task checklist local state for interactive demo
-  const [tasksState, setTasksState] = useState([
-    { id: 1, text: 'Review assigned tasks and check project sprint board', completed: true, priority: 'High' },
-    { id: 2, text: 'Complete planned commits and push PR to repository', completed: false, priority: 'High' },
-    { id: 3, text: 'Submit daily work report before 5:00 PM deadline', completed: false, priority: 'Medium' },
-  ]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -49,12 +43,6 @@ export default function DeveloperPortalPage() {
     }, 1000);
     return () => clearInterval(timer);
   }, []);
-
-  const toggleTask = (id: number) => {
-    setTasksState((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t))
-    );
-  };
 
   const devUser = currentUser || {
     id: 'developer-guest',
@@ -96,7 +84,7 @@ export default function DeveloperPortalPage() {
               <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-white font-bold text-xs">
                 <Activity className="h-4 w-4" />
               </div>
-              <span className="font-extrabold text-sm text-slate-900 tracking-tight">WorkPulse <span className="text-blue-600 font-bold text-xs ml-1 bg-blue-50 px-2 py-0.5 rounded-md">Developer Portal</span></span>
+              <span className="font-extrabold text-sm text-slate-900 tracking-tight">WorkPulse <span className="text-blue-600 font-bold text-xs ml-1 bg-blue-50 px-2 py-0.5 rounded-md">Developer Workspace</span></span>
             </div>
           </div>
 
@@ -155,7 +143,7 @@ export default function DeveloperPortalPage() {
                   <div className="flex items-center gap-2">
                     <h1 className="text-xl sm:text-2xl font-black">Welcome, {devUser.full_name}</h1>
                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 px-2.5 py-0.5 text-[11px] font-bold text-emerald-300">
-                      <UserCheck className="h-3 w-3" /> Active
+                      <UserCheck className="h-3 w-3" /> Active Developer
                     </span>
                   </div>
                   <p className="text-xs text-blue-200 mt-1">
@@ -186,7 +174,7 @@ export default function DeveloperPortalPage() {
             <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
               <p className="text-xs font-semibold text-slate-500 uppercase">Assigned Projects</p>
               <p className="text-2xl font-black text-slate-900 mt-1">{myProjects.length}</p>
-              <p className="text-xs text-slate-400 mt-1">{projects.length} available in workspace</p>
+              <p className="text-xs text-slate-400 mt-1">{projects.length} total active in workspace</p>
             </div>
 
             <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
@@ -198,122 +186,118 @@ export default function DeveloperPortalPage() {
             <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
               <p className="text-xs font-semibold text-slate-500 uppercase">Total Hours Logged</p>
               <p className="text-2xl font-black text-blue-600 mt-1">{totalHoursLogged}h</p>
-              <p className="text-xs text-slate-400 mt-1">Recorded in Supabase database</p>
+              <p className="text-xs text-slate-400 mt-1">Permanently tracked in Supabase</p>
             </div>
           </div>
 
-          {/* Two Columns: Assigned Projects + Daily Tasks Checklist */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Left: Assigned Projects Grid */}
-            <div className="lg:col-span-7 space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-bold text-slate-900">Your Assigned Projects ({displayProjects.length})</h2>
-              </div>
+          {/* Assigned Projects Section (Full width now that checklist is removed) */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-slate-900">Your Assigned Projects ({displayProjects.length})</h2>
+            </div>
 
-              {displayProjects.length > 0 ? (
-                <div className="space-y-3">
-                  {displayProjects.map((project) => (
-                    <div
-                      key={project.id}
-                      className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs transition hover:shadow-md hover:border-slate-300"
-                    >
+            {displayProjects.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {displayProjects.map((project) => (
+                  <div
+                    key={project.id}
+                    className="flex flex-col justify-between rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs transition hover:shadow-md hover:border-slate-300"
+                  >
+                    <div>
                       <div className="flex items-start justify-between">
-                        <div>
-                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{project.client_name}</span>
-                          <h3 className="text-base font-bold text-slate-900 mt-0.5">{project.name}</h3>
-                          <p className="text-xs text-slate-500 mt-1 line-clamp-2">{project.description || 'Continuous project tracking.'}</p>
-                        </div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{project.client_name}</span>
                         <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold text-blue-700 border border-blue-200 capitalize">
                           {project.status.replace('_', ' ')}
                         </span>
                       </div>
-
-                      <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-xs">
-                        <span className="text-slate-500 flex items-center gap-1 text-[11px]">
-                          <Clock className="h-3.5 w-3.5 text-slate-400" /> Scheduled report: <strong>{project.scheduled_report_time || '5:00 PM'}</strong>
-                        </span>
-                        <button
-                          onClick={() => {
-                            setSelectedProjectId(project.id);
-                            setIsReportModalOpen(true);
-                          }}
-                          className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700"
-                        >
-                          <span>File Report</span>
-                          <ChevronRight className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
+                      <h3 className="text-base font-bold text-slate-900 mt-1.5">{project.name}</h3>
+                      <p className="text-xs text-slate-500 mt-1 line-clamp-2">{project.description || 'Continuous project tracking.'}</p>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
-                  <p className="text-xs text-slate-500">No projects currently assigned. Contact administrator Muhammad Ashiq.</p>
-                </div>
-              )}
-            </div>
 
-            {/* Right: Daily Checklist */}
-            <div className="lg:col-span-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-bold text-slate-900">Today's Action Checklist</h2>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs space-y-3">
-                {tasksState.map((task) => (
-                  <div
-                    key={task.id}
-                    onClick={() => toggleTask(task.id)}
-                    className={`flex items-start gap-3 p-3 rounded-xl border transition cursor-pointer ${
-                      task.completed ? 'bg-slate-50 border-slate-200 opacity-60' : 'bg-white border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    <button className="mt-0.5 text-blue-600 shrink-0">
-                      {task.completed ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4 text-slate-400" />}
-                    </button>
-                    <div className="flex-1">
-                      <p className={`text-xs font-semibold ${task.completed ? 'line-through text-slate-400' : 'text-slate-800'}`}>
-                        {task.text}
-                      </p>
+                    <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-3 text-xs">
+                      <span className="text-slate-500 flex items-center gap-1 text-[11px]">
+                        <Clock className="h-3.5 w-3.5 text-slate-400" /> Deadline: <strong>{project.scheduled_report_time || '5:00 PM'}</strong>
+                      </span>
+                      <button
+                        onClick={() => {
+                          setSelectedProjectId(project.id);
+                          setIsReportModalOpen(true);
+                        }}
+                        className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1 rounded-lg transition"
+                      >
+                        <span>File Report</span>
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </button>
                     </div>
                   </div>
                 ))}
               </div>
-            </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
+                <p className="text-xs text-slate-500">No projects currently assigned. Contact administrator Muhammad Ashiq.</p>
+              </div>
+            )}
           </div>
 
-          {/* Submissions History Table */}
-          <div className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs">
-            <h2 className="text-base font-bold text-slate-900 mb-4">Your Recent Daily Submissions in Supabase</h2>
+          {/* Submissions History Table with Review capability */}
+          <div className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Your Submitted Daily Work Reports</h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Click <strong>"Review Report"</strong> to examine your submission details (read-only audit trail).
+                </p>
+              </div>
+              <span className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1 rounded-xl">
+                {myReports.length} Reports Recorded
+              </span>
+            </div>
+
             {myReports.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                      <th className="pb-3 pr-4">Date</th>
-                      <th className="pb-3 px-4">Project</th>
-                      <th className="pb-3 px-4">Tasks Completed</th>
-                      <th className="pb-3 px-4">Hours</th>
-                      <th className="pb-3 pl-4">Status</th>
+                      <th className="pb-3 pr-4">Date & Time</th>
+                      <th className="pb-3 px-4">Project Name</th>
+                      <th className="pb-3 px-4">Tasks Summary</th>
+                      <th className="pb-3 px-4">Hours Logged</th>
+                      <th className="pb-3 px-4">Status</th>
+                      <th className="pb-3 pl-4 text-right">Review Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {myReports.map((rep) => (
-                      <tr key={rep.id}>
-                        <td className="py-3 pr-4 font-mono text-slate-600">{rep.report_date}</td>
-                        <td className="py-3 px-4 font-bold text-slate-800">{rep.project_name}</td>
-                        <td className="py-3 px-4 max-w-sm text-slate-600 truncate">{rep.tasks_completed}</td>
-                        <td className="py-3 px-4 font-bold text-slate-900">{rep.time_spent_hours}h</td>
-                        <td className="py-3 pl-4">
+                      <tr key={rep.id} className="hover:bg-slate-50/70 transition">
+                        <td className="py-3.5 pr-4">
+                          <p className="font-mono font-bold text-slate-800">{rep.report_date}</p>
+                          <p className="text-[10px] text-slate-400">{rep.submitted_at}</p>
+                        </td>
+                        <td className="py-3.5 px-4 font-bold text-slate-900">{rep.project_name}</td>
+                        <td className="py-3.5 px-4 max-w-xs text-slate-600 truncate" title={rep.tasks_completed}>
+                          {rep.tasks_completed}
+                        </td>
+                        <td className="py-3.5 px-4 font-extrabold text-blue-600">{rep.time_spent_hours}h</td>
+                        <td className="py-3.5 px-4">
                           {rep.is_on_time ? (
-                            <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">
-                              On-Time
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">
+                              <CheckCircle2 className="h-3 w-3" />
+                              <span>On-Time</span>
                             </span>
                           ) : (
-                            <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-bold text-amber-700 border border-amber-200">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-bold text-amber-700 border border-amber-200">
                               Delayed
                             </span>
                           )}
+                        </td>
+                        <td className="py-3.5 pl-4 text-right">
+                          <button
+                            onClick={() => setViewingReport(rep)}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-1.5 text-[11px] font-bold transition shadow-2xs"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            <span>Review Report</span>
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -321,13 +305,16 @@ export default function DeveloperPortalPage() {
                 </table>
               </div>
             ) : (
-              <div className="py-8 text-center text-xs text-slate-400 italic">
-                You haven't submitted any daily reports yet. Click "Submit Daily Work Report" above to file your first report.
+              <div className="py-12 text-center text-xs text-slate-400">
+                <FileText className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                <p className="font-semibold text-slate-600">No daily reports filed yet</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">Click "Submit Daily Work Report" to record your progress.</p>
               </div>
             )}
           </div>
         </main>
 
+        {/* Modals */}
         <WorkReportModal
           isOpen={isReportModalOpen}
           onClose={() => setIsReportModalOpen(false)}
@@ -337,6 +324,12 @@ export default function DeveloperPortalPage() {
         <AdminProfileModal
           isOpen={isProfileModalOpen}
           onClose={() => setIsProfileModalOpen(false)}
+        />
+
+        <ViewReportModal
+          isOpen={!!viewingReport}
+          onClose={() => setViewingReport(null)}
+          report={viewingReport}
         />
       </div>
     </PaywallGate>
