@@ -20,7 +20,7 @@ export default function AdminDashboardPage() {
   const [isProjectOpen, setIsProjectOpen] = useState(false);
 
   return (
-    <PaywallGate>
+    <PaywallGate requiredRole="admin">
       <div className="min-h-screen bg-[#F8FAFC]">
         {/* Fixed Left Sidebar */}
         <Sidebar />

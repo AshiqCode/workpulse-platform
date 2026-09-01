@@ -40,7 +40,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [adminProfile, setAdminProfile] = useState<UserProfile>(ADMIN_USER);
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(ADMIN_USER); // Logged in as Admin by default for convenience
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null); // Always start logged out — must authenticate
   const [developers, setDevelopers] = useState<UserProfile[]>([]);
   const [invitedEmails, setInvitedEmails] = useState<string[]>([
     'demo.dev@workpulse.io',

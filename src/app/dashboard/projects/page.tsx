@@ -27,7 +27,7 @@ export default function ProjectsPage() {
   });
 
   return (
-    <PaywallGate>
+    <PaywallGate requiredRole="admin">
       <div className="min-h-screen bg-[#F8FAFC]">
         <Sidebar />
         <div className="pl-64">

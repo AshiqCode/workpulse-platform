@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -21,7 +21,18 @@ import confetti from 'canvas-confetti';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, signup, adminProfile, invitedEmails } = useApp();
+  const { login, signup, adminProfile, invitedEmails, currentUser } = useApp();
+
+  // Redirect already-logged-in users to their correct portal
+  useEffect(() => {
+    if (currentUser) {
+      if (currentUser.role === 'admin') {
+        router.replace('/dashboard');
+      } else {
+        router.replace('/developer/portal');
+      }
+    }
+  }, [currentUser, router]);
 
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');

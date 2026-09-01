@@ -12,7 +12,7 @@ export default function AnalyticsPage() {
   const { stats, developers, workReports } = useApp();
 
   return (
-    <PaywallGate>
+    <PaywallGate requiredRole="admin">
       <div className="min-h-screen bg-[#F8FAFC]">
         <Sidebar />
         <div className="pl-64">

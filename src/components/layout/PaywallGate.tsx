@@ -1,44 +1,61 @@
 'use client';
 
-import React from 'react';
-import Link from 'next/link';
-import { Lock, ArrowRight, ShieldCheck } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { ShieldCheck, Activity } from 'lucide-react';
 import { useApp } from '@/lib/auth-context';
 
-interface PaywallGateProps {
+interface AuthGuardProps {
   children: React.ReactNode;
+  requiredRole?: 'admin' | 'developer' | 'any';
 }
 
-export function PaywallGate({ children }: PaywallGateProps) {
-  const { currentUser, adminProfile } = useApp();
+/**
+ * AuthGuard – strictly blocks unauthenticated and unauthorised users.
+ * - If not logged in → redirect to /login immediately.
+ * - If logged-in role does not match requiredRole → redirect to /login.
+ * - Shows a loading shimmer while the check runs.
+ */
+export function PaywallGate({ children, requiredRole = 'any' }: AuthGuardProps) {
+  const { currentUser } = useApp();
+  const router = useRouter();
 
-  // If user is logged in (as Admin or Developer), grant access
-  if (currentUser) {
-    return <>{children}</>;
+  useEffect(() => {
+    if (!currentUser) {
+      router.replace('/login');
+      return;
+    }
+    if (requiredRole !== 'any' && currentUser.role !== requiredRole) {
+      // Wrong role: admin tried developer route or vice-versa
+      if (currentUser.role === 'admin') {
+        router.replace('/dashboard');
+      } else {
+        router.replace('/developer/portal');
+      }
+    }
+  }, [currentUser, requiredRole, router]);
+
+  // Not authenticated yet — show a minimal loading screen
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center gap-3">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-700 to-indigo-600 text-white shadow-lg animate-pulse">
+          <Activity className="h-7 w-7" />
+        </div>
+        <p className="text-xs font-semibold text-slate-500 animate-pulse">Verifying identity…</p>
+      </div>
+    );
   }
 
-  // If not logged in, prompt sign in
-  return (
-    <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center p-6 select-none">
-      <div className="w-full max-w-md rounded-3xl border border-slate-200/90 bg-white p-8 text-center shadow-xl space-y-6 animate-in fade-in zoom-in-95">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
-          <ShieldCheck className="h-7 w-7" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-black text-slate-900">Sign In Required</h1>
-          <p className="text-xs text-slate-500 mt-1">
-            Please sign in with your Admin or invited Developer credentials to access this workspace.
-          </p>
-        </div>
-
-        <Link
-          href="/login"
-          className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 font-bold text-white shadow-md hover:bg-blue-700 active:scale-98 transition text-xs"
-        >
-          <span>Go to Sign In Page</span>
-          <ArrowRight className="h-4 w-4" />
-        </Link>
+  // Logged in but wrong role
+  if (requiredRole !== 'any' && currentUser.role !== requiredRole) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center gap-3">
+        <ShieldCheck className="h-10 w-10 text-blue-600 animate-pulse" />
+        <p className="text-xs font-semibold text-slate-500 animate-pulse">Redirecting…</p>
       </div>
-    </div>
-  );
+    );
+  }
+
+  return <>{children}</>;
 }

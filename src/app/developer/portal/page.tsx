@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/lib/auth-context';
 import { WorkReportModal } from '@/components/modals/WorkReportModal';
+import { PaywallGate } from '@/components/layout/PaywallGate';
 
 export default function DeveloperPortalPage() {
   const { currentUser, switchUser, projects, workReports, developers } = useApp();
@@ -71,6 +72,7 @@ export default function DeveloperPortalPage() {
   const onTimePct = displayReports.length > 0 ? Math.round((onTimeCount / (displayReports.length || 1)) * 100) : 100;
 
   return (
+    <PaywallGate requiredRole="developer">
     <div className="min-h-screen bg-[#F8FAFC]">
       {/* Top Portal Header */}
       <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-slate-200 bg-white/95 px-6 backdrop-blur-md">
@@ -330,5 +332,6 @@ export default function DeveloperPortalPage() {
         defaultProjectId={selectedProjectId}
       />
     </div>
+    </PaywallGate>
   );
 }
