@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { UserProfile, UserRole, Project, WorkReport, DashboardStats } from '@/types';
+import { UserProfile, UserRole, Project, WorkReport, DashboardStats, ProjectStatus } from '@/types';
 import { INITIAL_PROFILES, INITIAL_PROJECTS, INITIAL_WORK_LOGS, INITIAL_STATS } from './mock-data';
 
 interface AppContextType {
@@ -18,6 +18,9 @@ interface AppContextType {
   setDevelopers: React.Dispatch<React.SetStateAction<UserProfile[]>>;
   stats: DashboardStats;
   addProject: (project: Omit<Project, 'id' | 'created_at'>) => void;
+  updateProject: (id: string, updates: Partial<Project>) => void;
+  updateProjectStatus: (id: string, status: ProjectStatus) => void;
+  deleteProject: (id: string) => void;
   inviteDeveloper: (email: string, fullName: string) => void;
   submitReport: (report: Omit<WorkReport, 'id' | 'report_date' | 'submitted_at' | 'status' | 'is_on_time'>) => boolean;
 }
@@ -25,29 +28,29 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [developers, setDevelopers] = useState<UserProfile[]>(INITIAL_PROFILES.filter((p) => p.role === 'developer'));
-  const [currentUser, setCurrentUser] = useState<UserProfile>(INITIAL_PROFILES[0]); // Default Admin
-  const [isPaidAdmin, setIsPaidAdmin] = useState<boolean>(true); // $62 Pro access
+  const [developers, setDevelopers] = useState<UserProfile[]>([]);
+  const [currentUser, setCurrentUser] = useState<UserProfile>(INITIAL_PROFILES[0]);
+  const [isPaidAdmin, setIsPaidAdmin] = useState<boolean>(false); // Strict unpaid default until $62 is paid
   const [projects, setProjects] = useState<Project[]>(INITIAL_PROJECTS);
   const [workReports, setWorkReports] = useState<WorkReport[]>(INITIAL_WORK_LOGS);
   const [stats, setStats] = useState<DashboardStats>(INITIAL_STATS);
 
-  // Recalculate stats when projects or reports change
+  // Recalculate stats when projects, reports, or developers change
   useEffect(() => {
     const onTimeReports = workReports.filter((r) => r.is_on_time).length;
     const totalReports = workReports.length;
     const onTimePct = totalReports > 0 ? Math.round((onTimeReports / totalReports) * 100) : 100;
-    const totalHours = workReports.reduce((acc, r) => acc + (r.time_spent_hours || 0), 0) + 540;
+    const totalHours = workReports.reduce((acc, r) => acc + (r.time_spent_hours || 0), 0);
 
     setStats({
       activeProjects: projects.filter((p) => p.status !== 'completed').length,
       assignedDevelopers: developers.length,
       todaysReportsSubmitted: totalReports,
-      todaysReportsExpected: developers.length + 2,
+      todaysReportsExpected: developers.length,
       totalWeeklyHours: totalHours,
       onTimeRatePct: onTimePct,
-      activeProjectsChangePct: 3,
-      weeklyHoursChange: 25,
+      activeProjectsChangePct: projects.length > 0 ? 100 : 0,
+      weeklyHoursChange: totalHours,
     });
   }, [projects, workReports, developers]);
 
@@ -55,7 +58,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (role === 'admin') {
       setCurrentUser({ ...INITIAL_PROFILES[0], is_paid_admin: isPaidAdmin });
     } else {
-      const dev = developers.find((d) => (id ? d.id === id : true)) || developers[0];
+      const dev = developers.find((d) => (id ? d.id === id : true)) || developers[0] || {
+        id: 'guest-dev',
+        email: 'developer@example.com',
+        full_name: 'Developer Member',
+        role: 'developer',
+        is_paid_admin: false,
+      };
       setCurrentUser(dev);
     }
   };
@@ -71,13 +80,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setProjects((prev) => [created, ...prev]);
   };
 
+  const updateProject = (id: string, updates: Partial<Project>) => {
+    setProjects((prev) =>
+      prev.map((p) => {
+        if (p.id !== id) return p;
+        const updatedDevIds = updates.assigned_dev_ids !== undefined ? updates.assigned_dev_ids : p.assigned_dev_ids;
+        const updatedMembers = developers.filter((d) => (updatedDevIds || []).includes(d.id));
+        return {
+          ...p,
+          ...updates,
+          members: updatedMembers,
+          updated_at: new Date().toISOString(),
+        };
+      })
+    );
+  };
+
+  const updateProjectStatus = (id: string, status: ProjectStatus) => {
+    setProjects((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, status, updated_at: new Date().toISOString() } : p))
+    );
+  };
+
+  const deleteProject = (id: string) => {
+    setProjects((prev) => prev.filter((p) => p.id !== id));
+    setWorkReports((prev) => prev.filter((r) => r.project_id !== id));
+  };
+
   const inviteDeveloper = (email: string, fullName: string) => {
     const newDev: UserProfile = {
       id: `dev-${Date.now()}`,
       email,
       full_name: fullName,
       role: 'developer',
-      avatar_url: `https://images.unsplash.com/photo-${1500000000000 + Math.floor(Math.random() * 100000000)}?w=150`,
+      avatar_url: `https://images.unsplash.com/photo-${1535713875002 + Math.floor(Math.random() * 10000)}?w=150`,
       is_paid_admin: false,
       assigned_projects_count: 0,
       on_time_rate_pct: 100,
@@ -144,6 +180,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setDevelopers,
         stats,
         addProject,
+        updateProject,
+        updateProjectStatus,
+        deleteProject,
         inviteDeveloper,
         submitReport,
       }}

@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Project, UserProfile, WorkReport, Invitation } from '@/types';
+import { Project, UserProfile, WorkReport, ProjectStatus } from '@/types';
 import { INITIAL_PROFILES, INITIAL_PROJECTS, INITIAL_WORK_LOGS } from './mock-data';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://xzdizzxghqijqkvriold.supabase.co';
@@ -14,13 +14,13 @@ export async function getProjects(): Promise<Project[]> {
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (projError || !projectsData || projectsData.length === 0) {
-      return INITIAL_PROJECTS;
+    if (projError || !projectsData) {
+      return [];
     }
 
     const { data: membersData } = await supabase
       .from('workpulse_project_members')
-      .select('project_id, developer_id, role_in_project, workpulse_profiles(*)');
+      .select('project_id, developer_id, role_in_project');
 
     const { data: profilesData } = await supabase
       .from('workpulse_profiles')
@@ -46,12 +46,124 @@ export async function getProjects(): Promise<Project[]> {
       return {
         ...p,
         assigned_dev_ids: assignedIds,
-        members: assignedMembers.length > 0 ? assignedMembers : INITIAL_PROJECTS[0].members,
+        members: assignedMembers,
       };
     });
   } catch (err) {
-    console.warn('Using fallback projects data:', err);
-    return INITIAL_PROJECTS;
+    console.warn('Error fetching projects:', err);
+    return [];
+  }
+}
+
+export async function createProject(projectData: {
+  name: string;
+  client_name: string;
+  description: string;
+  deadline: string;
+  scheduled_report_time: string;
+  developer_ids: string[];
+  status?: ProjectStatus;
+  progress_pct?: number;
+}): Promise<{ success: boolean; project?: any; error?: string }> {
+  try {
+    const { data: proj, error: pError } = await supabase
+      .from('workpulse_projects')
+      .insert({
+        name: projectData.name,
+        client_name: projectData.client_name,
+        description: projectData.description,
+        deadline: projectData.deadline,
+        scheduled_report_time: projectData.scheduled_report_time || '17:00:00',
+        status: projectData.status || 'in_progress',
+        progress_pct: projectData.progress_pct || 0,
+      })
+      .select()
+      .single();
+
+    if (pError) throw pError;
+
+    if (projectData.developer_ids && projectData.developer_ids.length > 0) {
+      const membersToInsert = projectData.developer_ids.map((devId) => ({
+        project_id: proj.id,
+        developer_id: devId,
+        role_in_project: 'Developer',
+      }));
+
+      await supabase.from('workpulse_project_members').insert(membersToInsert);
+    }
+
+    return { success: true, project: proj };
+  } catch (err: any) {
+    console.error('Error creating project:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function updateProject(
+  id: string,
+  updates: Partial<Project>
+): Promise<{ success: boolean; project?: any; error?: string }> {
+  try {
+    const { assigned_dev_ids, members, ...projectFields } = updates;
+
+    const { data: proj, error } = await supabase
+      .from('workpulse_projects')
+      .update({
+        ...projectFields,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    if (assigned_dev_ids !== undefined) {
+      // Re-assign members
+      await supabase.from('workpulse_project_members').delete().eq('project_id', id);
+      if (assigned_dev_ids.length > 0) {
+        const membersToInsert = assigned_dev_ids.map((devId) => ({
+          project_id: id,
+          developer_id: devId,
+          role_in_project: 'Developer',
+        }));
+        await supabase.from('workpulse_project_members').insert(membersToInsert);
+      }
+    }
+
+    return { success: true, project: proj };
+  } catch (err: any) {
+    console.error('Error updating project:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function updateProjectStatus(
+  id: string,
+  status: ProjectStatus
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('workpulse_projects')
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq('id', id);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error updating status:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function deleteProject(id: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('workpulse_projects').delete().eq('id', id);
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error deleting project:', err);
+    return { success: false, error: err.message };
   }
 }
 
@@ -62,13 +174,13 @@ export async function getDevelopers(): Promise<UserProfile[]> {
       .select('*')
       .eq('role', 'developer');
 
-    if (error || !data || data.length === 0) {
-      return INITIAL_PROFILES.filter((p) => p.role === 'developer');
+    if (error || !data) {
+      return [];
     }
     return data;
   } catch (err) {
-    console.warn('Using fallback profiles data:', err);
-    return INITIAL_PROFILES.filter((p) => p.role === 'developer');
+    console.warn('Error fetching developers:', err);
+    return [];
   }
 }
 
@@ -83,8 +195,8 @@ export async function getWorkReports(): Promise<WorkReport[]> {
       `)
       .order('submitted_at', { ascending: false });
 
-    if (error || !data || data.length === 0) {
-      return INITIAL_WORK_LOGS;
+    if (error || !data) {
+      return [];
     }
 
     return data.map((r: any) => ({
@@ -108,8 +220,8 @@ export async function getWorkReports(): Promise<WorkReport[]> {
       status: r.status,
     }));
   } catch (err) {
-    console.warn('Using fallback work logs data:', err);
-    return INITIAL_WORK_LOGS;
+    console.warn('Error fetching work logs:', err);
+    return [];
   }
 }
 
@@ -124,7 +236,6 @@ export async function submitWorkReport(reportData: {
   scheduled_time?: string;
 }): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
-    // Determine on-time calculation (default project deadline 17:00 / 5 PM local)
     const now = new Date();
     const currentHour = now.getHours();
     const currentMin = now.getMinutes();
@@ -152,48 +263,6 @@ export async function submitWorkReport(reportData: {
     return { success: true, data };
   } catch (err: any) {
     console.error('Error submitting work report:', err);
-    return { success: false, error: err.message };
-  }
-}
-
-export async function createProject(projectData: {
-  name: string;
-  client_name: string;
-  description: string;
-  deadline: string;
-  scheduled_report_time: string;
-  developer_ids: string[];
-}): Promise<{ success: boolean; project?: any; error?: string }> {
-  try {
-    const { data: proj, error: pError } = await supabase
-      .from('workpulse_projects')
-      .insert({
-        name: projectData.name,
-        client_name: projectData.client_name,
-        description: projectData.description,
-        deadline: projectData.deadline,
-        scheduled_report_time: projectData.scheduled_report_time || '17:00:00',
-        status: 'in_progress',
-        progress_pct: 10,
-      })
-      .select()
-      .single();
-
-    if (pError) throw pError;
-
-    if (projectData.developer_ids && projectData.developer_ids.length > 0) {
-      const membersToInsert = projectData.developer_ids.map((devId) => ({
-        project_id: proj.id,
-        developer_id: devId,
-        role_in_project: 'Developer',
-      }));
-
-      await supabase.from('workpulse_project_members').insert(membersToInsert);
-    }
-
-    return { success: true, project: proj };
-  } catch (err: any) {
-    console.error('Error creating project:', err);
     return { success: false, error: err.message };
   }
 }
