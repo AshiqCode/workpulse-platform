@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Send, Clock, GitPullRequest, AlertTriangle, Calendar, Check, Sparkles } from 'lucide-react';
+import { X, Send, Clock, CheckCircle2, AlertTriangle, Sparkles, FileText, Check } from 'lucide-react';
 import { useApp } from '@/lib/auth-context';
 import confetti from 'canvas-confetti';
 
@@ -12,25 +12,25 @@ interface WorkReportModalProps {
 }
 
 export function WorkReportModal({ isOpen, onClose, defaultProjectId }: WorkReportModalProps) {
-  const { projects, currentUser, submitReport } = useApp();
-  const [projectId, setProjectId] = useState(defaultProjectId || projects[0]?.id || '');
+  const { projects, submitReport, currentUser } = useApp();
+  const [selectedProjectId, setSelectedProjectId] = useState(defaultProjectId || projects[0]?.id || '');
   const [tasksCompleted, setTasksCompleted] = useState('');
-  const [timeSpentHours, setTimeSpentHours] = useState('6.5');
+  const [timeSpentHours, setTimeSpentHours] = useState('4.5');
   const [prLinks, setPrLinks] = useState('');
   const [blockers, setBlockers] = useState('');
   const [tomorrowPlan, setTomorrowPlan] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionResult, setSubmissionResult] = useState<{ submitted: boolean; isOnTime: boolean } | null>(null);
 
   if (!isOpen) return null;
 
-  const currentProj = projects.find((p) => p.id === projectId) || projects[0];
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!tasksCompleted || !projectId) return;
+    if (!tasksCompleted || !selectedProjectId) return;
 
-    const isOnTime = submitReport({
-      project_id: projectId,
+    setIsSubmitting(true);
+    const isOnTime = await submitReport({
+      project_id: selectedProjectId,
       tasks_completed: tasksCompleted,
       time_spent_hours: parseFloat(timeSpentHours) || 0,
       pr_commit_links: prLinks,
@@ -38,6 +38,7 @@ export function WorkReportModal({ isOpen, onClose, defaultProjectId }: WorkRepor
       tomorrow_plan: tomorrowPlan,
       developer_id: currentUser?.id || 'dev-anon',
     });
+    setIsSubmitting(false);
 
     // Trigger celebratory confetti
     try {
@@ -62,17 +63,15 @@ export function WorkReportModal({ isOpen, onClose, defaultProjectId }: WorkRepor
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs animate-in fade-in">
-      <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+      <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-slate-100 pb-4">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 font-bold">
-              <Sparkles className="h-4 w-4" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 text-blue-700 font-bold">
+              <FileText className="h-4 w-4" />
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-900">Submit Daily Work Report</h3>
-              <p className="text-xs text-slate-500">
-                Scheduled daily submission deadline: <span className="font-semibold text-slate-700">{currentProj?.scheduled_report_time ? currentProj.scheduled_report_time.slice(0, 5) : '17:00'}</span>
-              </p>
+              <p className="text-xs text-slate-500">Record tasks, engineering hours, and commit references</p>
             </div>
           </div>
           <button
@@ -84,7 +83,7 @@ export function WorkReportModal({ isOpen, onClose, defaultProjectId }: WorkRepor
         </div>
 
         {submissionResult ? (
-          <div className="py-12 text-center animate-in fade-in zoom-in">
+          <div className="py-10 text-center animate-in fade-in zoom-in space-y-3">
             <div
               className={`mx-auto flex h-14 w-14 items-center justify-center rounded-full ${
                 submissionResult.isOnTime ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'
@@ -92,128 +91,123 @@ export function WorkReportModal({ isOpen, onClose, defaultProjectId }: WorkRepor
             >
               <Check className="h-7 w-7" />
             </div>
-            <h4 className="mt-3 text-lg font-bold text-slate-900">Work Report Submitted!</h4>
-            <p className="mt-1 text-xs text-slate-600">
-              Logged as{' '}
-              <span
-                className={`font-bold ${
-                  submissionResult.isOnTime ? 'text-emerald-600' : 'text-amber-600'
-                }`}
-              >
-                {submissionResult.isOnTime ? 'On-Time (Compliant)' : 'Delayed'}
-              </span>
-              . Admin dashboard has been updated.
+            <h4 className="text-lg font-bold text-slate-900">Report Successfully Submitted!</h4>
+            <p className="text-xs text-slate-500 max-w-xs mx-auto">
+              Your daily engineering log has been permanently recorded in Supabase.
             </p>
+            <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              <span>Status: {submissionResult.isOnTime ? 'On-Time Submission' : 'Delayed Submission'}</span>
+            </div>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="mt-4 space-y-4 text-xs">
-            {/* Project selection */}
             <div>
-              <label className="block font-bold text-slate-700 mb-1">Select Assigned Project *</label>
+              <label className="block font-bold text-slate-700 mb-1">Target Project *</label>
               <select
-                value={projectId}
-                onChange={(e) => setProjectId(e.target.value)}
-                className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50/70 px-3 text-slate-800 text-xs focus:border-blue-600 focus:bg-white focus:outline-none"
+                value={selectedProjectId}
+                onChange={(e) => setSelectedProjectId(e.target.value)}
+                required
+                className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50/70 px-3 text-slate-800 text-xs focus:border-blue-600 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100 font-semibold"
               >
                 {projects.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name} — {p.client_name} (Due {p.scheduled_report_time ? p.scheduled_report_time.slice(0, 5) : '17:00'})
+                    {p.name} ({p.client_name}) - Deadline: {p.scheduled_report_time}
                   </option>
                 ))}
               </select>
             </div>
 
-            {/* Tasks completed */}
             <div>
               <label className="block font-bold text-slate-700 mb-1">Tasks Completed Today *</label>
               <textarea
-                rows={3}
                 required
-                placeholder="Implemented checkout UI, resolved JWT token expiration bug #415, and integrated stripe sheet..."
+                rows={3}
+                placeholder="Bullet points of features built, bugs fixed, or PRs merged..."
                 value={tasksCompleted}
                 onChange={(e) => setTasksCompleted(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-slate-50/70 p-3 text-slate-800 text-xs focus:border-blue-600 focus:bg-white focus:outline-none"
+                className="w-full rounded-lg border border-slate-200 bg-slate-50/70 p-3 text-slate-800 text-xs placeholder-slate-400 focus:border-blue-600 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
               />
             </div>
 
-            {/* Time spent & PR links */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Time Spent Today (Hours) *</label>
+                <label className="block font-bold text-slate-700 mb-1">Hours Spent *</label>
                 <div className="relative">
                   <Clock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <input
                     type="number"
                     step="0.5"
                     min="0.5"
-                    max="24"
+                    max="18"
                     required
                     value={timeSpentHours}
                     onChange={(e) => setTimeSpentHours(e.target.value)}
-                    className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50/70 pl-9 pr-3 text-slate-800 text-xs focus:border-blue-600 focus:bg-white focus:outline-none"
+                    className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50/70 pl-9 pr-3 text-slate-800 text-xs focus:border-blue-600 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100 font-semibold"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Pull Request / Commit Links</label>
-                <div className="relative">
-                  <GitPullRequest className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="github.com/org/repo/pull/104"
-                    value={prLinks}
-                    onChange={(e) => setPrLinks(e.target.value)}
-                    className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50/70 pl-9 pr-3 text-slate-800 text-xs focus:border-blue-600 focus:bg-white focus:outline-none"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Blockers */}
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">Blockers & Roadblocks (Optional)</label>
-              <div className="relative">
-                <AlertTriangle className="absolute left-3 top-3 h-4 w-4 text-amber-500" />
-                <textarea
-                  rows={2}
-                  placeholder="e.g. Waiting on API staging credentials from backend lead..."
-                  value={blockers}
-                  onChange={(e) => setBlockers(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 bg-slate-50/70 pl-9 pr-3 py-2 text-slate-800 text-xs focus:border-blue-600 focus:bg-white focus:outline-none"
+                <label className="block font-bold text-slate-700 mb-1">PR / GitHub Link</label>
+                <input
+                  type="url"
+                  placeholder="https://github.com/..."
+                  value={prLinks}
+                  onChange={(e) => setPrLinks(e.target.value)}
+                  className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50/70 px-3 text-slate-800 text-xs placeholder-slate-400 focus:border-blue-600 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
                 />
               </div>
             </div>
 
-            {/* Tomorrow's Plan */}
             <div>
-              <label className="block font-bold text-slate-700 mb-1">Tomorrow's Plan</label>
-              <div className="relative">
-                <Calendar className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                <textarea
-                  rows={2}
-                  placeholder="e.g. Complete checkout webhook listener and conduct end-to-end sandbox purchase tests..."
-                  value={tomorrowPlan}
-                  onChange={(e) => setTomorrowPlan(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 bg-slate-50/70 pl-9 pr-3 py-2 text-slate-800 text-xs focus:border-blue-600 focus:bg-white focus:outline-none"
-                />
-              </div>
+              <label className="block font-bold text-slate-700 mb-1">Blockers / Dependencies (Optional)</label>
+              <input
+                type="text"
+                placeholder="None or specify API/design dependencies..."
+                value={blockers}
+                onChange={(e) => setBlockers(e.target.value)}
+                className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50/70 px-3 text-slate-800 text-xs placeholder-slate-400 focus:border-blue-600 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+              />
             </div>
 
-            <div className="mt-6 flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Tomorrow's Objectives (Optional)</label>
+              <input
+                type="text"
+                placeholder="Next planned feature or refactoring task..."
+                value={tomorrowPlan}
+                onChange={(e) => setTomorrowPlan(e.target.value)}
+                className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50/70 px-3 text-slate-800 text-xs placeholder-slate-400 focus:border-blue-600 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+
+            <div className="rounded-xl border border-blue-200/80 bg-blue-50/50 p-3 text-[11px] text-blue-900">
+              <span className="font-bold">⏰ Deadline Compliance:</span> Reports submitted before 5:00 PM PST are verified and flagged as On-Time.
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-2.5 pt-2">
               <button
                 type="button"
                 onClick={onClose}
+                disabled={isSubmitting}
                 className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-5 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 active:scale-98 transition"
+                disabled={isSubmitting}
+                className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-5 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-700 active:scale-98 transition disabled:opacity-50"
               >
-                <Send className="h-3.5 w-3.5" />
-                <span>Submit Work Report</span>
+                {isSubmitting ? (
+                  <span>Submitting to Supabase...</span>
+                ) : (
+                  <>
+                    <Send className="h-3.5 w-3.5" />
+                    <span>Submit Daily Report</span>
+                  </>
+                )}
               </button>
             </div>
           </form>

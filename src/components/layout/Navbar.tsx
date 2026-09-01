@@ -3,9 +3,10 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Search, Bell, Plus, UserPlus, Sparkles, ShieldCheck, CheckCircle2, ChevronDown, User, LogOut } from 'lucide-react';
+import { Search, Plus, UserPlus, ShieldCheck, ChevronDown, User, LogOut } from 'lucide-react';
 import { useApp } from '@/lib/auth-context';
 import { AdminProfileModal } from '@/components/modals/AdminProfileModal';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 
 interface NavbarProps {
   onOpenInviteModal?: () => void;
@@ -88,14 +89,17 @@ export function Navbar({ onOpenInviteModal, onOpenProjectModal, onOpenProfileMod
               onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
               className="flex items-center gap-2.5 rounded-lg p-1 transition hover:bg-slate-100"
             >
-              <img
-                src={activeUser.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
-                alt={activeUser.full_name}
-                className="h-8 w-8 rounded-full border border-slate-200 object-cover shadow-xs"
+              <UserAvatar
+                avatarUrl={activeUser.avatar_url}
+                name={activeUser.full_name}
+                email={activeUser.email}
+                sizeClassName="h-8 w-8"
+                textSizeClassName="text-[10px]"
+                className="border border-slate-200 shadow-xs"
               />
               <div className="hidden text-left sm:block">
                 <p className="text-xs font-semibold text-slate-800 leading-tight">{activeUser.full_name}</p>
-                <p className="text-[11px] text-slate-500 capitalize">{activeUser.role} · {activeUser.company || 'Studio'}</p>
+                <p className="text-[11px] text-slate-500 capitalize">{activeUser.role} · {activeUser.company || 'Workspace'}</p>
               </div>
               <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
             </button>
@@ -105,35 +109,41 @@ export function Navbar({ onOpenInviteModal, onOpenProjectModal, onOpenProfileMod
                 <div className="border-b border-slate-100 px-3 py-2.5">
                   <p className="text-xs font-bold text-slate-900">{activeUser.full_name}</p>
                   <p className="text-[11px] text-slate-500 truncate">{activeUser.email}</p>
-                  <p className="text-[10px] text-blue-600 font-semibold mt-0.5">{activeUser.company || 'Personal Workspace'}</p>
+                  <p className="text-[10px] text-blue-600 font-semibold mt-0.5">{activeUser.company || 'Workspace Member'}</p>
                 </div>
                 <div className="py-1 text-xs">
-                  {activeUser.role === 'admin' && (
-                    <button
-                      onClick={() => {
-                        setProfileDropdownOpen(false);
+                  <button
+                    onClick={() => {
+                      setProfileDropdownOpen(false);
+                      if (onOpenProfileModal) {
+                        onOpenProfileModal();
+                      } else {
                         setIsProfileModalOpen(true);
-                      }}
-                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-slate-700 hover:bg-slate-50 text-left font-medium"
+                      }
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-slate-700 hover:bg-slate-50 text-left font-medium"
+                  >
+                    <User className="h-3.5 w-3.5 text-blue-600" />
+                    <span>Edit Profile & Avatar</span>
+                  </button>
+
+                  {activeUser.role === 'admin' ? (
+                    <Link
+                      href="/dashboard"
+                      onClick={() => setProfileDropdownOpen(false)}
+                      className="block rounded-lg px-3 py-2 text-slate-700 hover:bg-slate-50 font-medium"
                     >
-                      <User className="h-3.5 w-3.5 text-blue-600" />
-                      <span>Edit Profile & Onboarding</span>
-                    </button>
+                      Admin Dashboard
+                    </Link>
+                  ) : (
+                    <Link
+                      href="/developer/portal"
+                      onClick={() => setProfileDropdownOpen(false)}
+                      className="block rounded-lg px-3 py-2 text-slate-700 hover:bg-slate-50 font-medium"
+                    >
+                      Developer Work Portal
+                    </Link>
                   )}
-                  <Link
-                    href="/dashboard"
-                    onClick={() => setProfileDropdownOpen(false)}
-                    className="block rounded-lg px-3 py-2 text-slate-700 hover:bg-slate-50 font-medium"
-                  >
-                    Admin Dashboard
-                  </Link>
-                  <Link
-                    href="/developer/portal"
-                    onClick={() => setProfileDropdownOpen(false)}
-                    className="block rounded-lg px-3 py-2 text-slate-700 hover:bg-slate-50 font-medium"
-                  >
-                    Developer Work Portal
-                  </Link>
                 </div>
                 <div className="border-t border-slate-100 pt-1">
                   <button

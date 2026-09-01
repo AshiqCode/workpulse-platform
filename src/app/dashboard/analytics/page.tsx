@@ -6,10 +6,16 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { AnalyticsChart } from '@/components/dashboard/AnalyticsChart';
 import { PaywallGate } from '@/components/layout/PaywallGate';
 import { useApp } from '@/lib/auth-context';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { TrendingUp, Users, CheckCircle, Clock, Flame } from 'lucide-react';
 
 export default function AnalyticsPage() {
   const { stats, developers, workReports } = useApp();
+
+  const totalReports = workReports.length;
+  const onTimeCount = workReports.filter((r) => r.is_on_time).length;
+  const delayedCount = workReports.filter((r) => !r.is_on_time).length;
+  const onTimePct = totalReports > 0 ? Math.round((onTimeCount / totalReports) * 100) : 0;
 
   return (
     <PaywallGate requiredRole="admin">
@@ -39,16 +45,16 @@ export default function AnalyticsPage() {
 
                   <div className="flex items-center justify-center py-4">
                     <div className="relative flex h-32 w-32 items-center justify-center rounded-full border-8 border-emerald-500 bg-emerald-50 text-emerald-950 font-black text-3xl shadow-inner">
-                      <span>{stats.onTimeRatePct}%</span>
+                      <span>{onTimePct}%</span>
                     </div>
                   </div>
 
                   <div className="mt-4 flex items-center justify-between text-xs text-slate-600 border-t border-slate-100 pt-3">
                     <span className="flex items-center gap-1">
-                      <CheckCircle className="h-3.5 w-3.5 text-emerald-600" /> On-Time: {stats.todaysReportsSubmitted}
+                      <CheckCircle className="h-3.5 w-3.5 text-emerald-600" /> On-Time: {onTimeCount}
                     </span>
                     <span className="flex items-center gap-1">
-                      <Clock className="h-3.5 w-3.5 text-amber-600" /> Delayed: {Math.max(0, stats.todaysReportsExpected - stats.todaysReportsSubmitted)}
+                      <Clock className="h-3.5 w-3.5 text-amber-600" /> Delayed: {delayedCount}
                     </span>
                   </div>
                 </div>
@@ -60,22 +66,30 @@ export default function AnalyticsPage() {
                   </h3>
                   {developers.length > 0 ? (
                     <div className="space-y-3">
-                      {developers.slice(0, 3).map((dev, idx) => (
-                        <div key={dev.id} className="flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-2.5">
-                            <span className="font-mono text-slate-400 font-bold">#{idx + 1}</span>
-                            <img
-                              src={dev.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'}
-                              alt={dev.full_name}
-                              className="h-7 w-7 rounded-full object-cover"
-                            />
-                            <span className="font-bold text-slate-800">{dev.full_name}</span>
+                      {developers.slice(0, 3).map((dev, idx) => {
+                        const devReports = workReports.filter((r) => r.developer_id === dev.id);
+                        const devOnTime = devReports.filter((r) => r.is_on_time).length;
+                        const devPct = devReports.length > 0 ? Math.round((devOnTime / devReports.length) * 100) : 0;
+
+                        return (
+                          <div key={dev.id} className="flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2.5">
+                              <span className="font-mono text-slate-400 font-bold">#{idx + 1}</span>
+                              <UserAvatar
+                                avatarUrl={dev.avatar_url}
+                                name={dev.full_name}
+                                email={dev.email}
+                                sizeClassName="h-7 w-7"
+                                textSizeClassName="text-[10px]"
+                              />
+                              <span className="font-bold text-slate-800">{dev.full_name}</span>
+                            </div>
+                            <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
+                              {devPct}% On-Time
+                            </span>
                           </div>
-                          <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
-                            {dev.on_time_rate_pct || 100}% On-Time
-                          </span>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
                     <p className="text-xs text-slate-400 italic">No developer metrics recorded yet.</p>

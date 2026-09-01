@@ -6,11 +6,48 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { InviteDeveloperModal } from '@/components/modals/InviteDeveloperModal';
 import { PaywallGate } from '@/components/layout/PaywallGate';
 import { useApp } from '@/lib/auth-context';
-import { UserPlus, Clock, Users } from 'lucide-react';
+import { UserAvatar } from '@/components/ui/UserAvatar';
+import { UserPlus, Clock, Users, Trash2, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 export default function DevelopersPage() {
-  const { developers, projects, workReports } = useApp();
+  const { developers, projects, workReports, deleteDeveloper } = useApp();
   const [isInviteOpen, setIsInviteOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
+
+  const handleDelete = async (devId: string, devName: string) => {
+    setDeleteError(null);
+    setDeleteSuccess(null);
+
+    // Check project assignment on client first for instant feedback
+    const assignedProjects = projects.filter((p) =>
+      (p.assigned_dev_ids || []).includes(devId)
+    );
+
+    if (assignedProjects.length > 0) {
+      const projNames = assignedProjects.map((p) => `"${p.name}"`).join(', ');
+      setDeleteError(
+        `Cannot delete ${devName}: Developer is currently assigned to project(s): ${projNames}. Please remove ${devName} from those projects first.`
+      );
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to remove ${devName} from the workspace?`)) {
+      return;
+    }
+
+    setDeletingId(devId);
+    const res = await deleteDeveloper(devId);
+    setDeletingId(null);
+
+    if (res.success) {
+      setDeleteSuccess(`${devName} has been successfully removed.`);
+      setTimeout(() => setDeleteSuccess(null), 3500);
+    } else {
+      setDeleteError(res.error || 'Failed to delete developer.');
+    }
+  };
 
   return (
     <PaywallGate requiredRole="admin">
@@ -38,37 +75,83 @@ export default function DevelopersPage() {
               </button>
             </div>
 
+            {/* Status alerts */}
+            {deleteError && (
+              <div className="flex items-start gap-2.5 rounded-2xl bg-rose-50 p-4 text-rose-800 border border-rose-200 text-xs shadow-xs animate-in fade-in">
+                <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-bold text-rose-900">Deletion Blocked</p>
+                  <p className="mt-0.5 text-rose-700">{deleteError}</p>
+                </div>
+                <button
+                  onClick={() => setDeleteError(null)}
+                  className="text-rose-500 hover:text-rose-800 font-bold ml-2"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {deleteSuccess && (
+              <div className="flex items-center gap-2.5 rounded-2xl bg-emerald-50 p-4 text-emerald-800 border border-emerald-200 text-xs shadow-xs animate-in fade-in">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                <span>{deleteSuccess}</span>
+              </div>
+            )}
+
             {/* Developer Cards Grid */}
             {developers.length > 0 ? (
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 {developers.map((dev) => {
-                  const assignedCount = projects.filter((p) =>
+                  const assignedProjects = projects.filter((p) =>
                     (p.assigned_dev_ids || []).includes(dev.id)
-                  ).length;
+                  );
+                  const assignedCount = assignedProjects.length;
                   const devReports = workReports.filter((r) => r.developer_id === dev.id);
                   const onTimeCount = devReports.filter((r) => r.is_on_time).length;
-                  const onTimePct = devReports.length > 0 ? Math.round((onTimeCount / devReports.length) * 100) : 100;
+                  const onTimePct = devReports.length > 0 ? Math.round((onTimeCount / devReports.length) * 100) : 0;
+                  const totalHours = devReports.reduce((acc, r) => acc + (Number(r.time_spent_hours) || 0), 0);
 
                   return (
                     <div
                       key={dev.id}
-                      className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs transition hover:shadow-md hover:border-slate-300"
+                      className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs transition hover:shadow-md hover:border-slate-300 relative group"
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-3">
-                          <img
-                            src={dev.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'}
-                            alt={dev.full_name}
-                            className="h-12 w-12 rounded-full border-2 border-slate-100 object-cover shadow-xs"
+                          <UserAvatar
+                            avatarUrl={dev.avatar_url}
+                            name={dev.full_name}
+                            email={dev.email}
+                            sizeClassName="h-12 w-12"
+                            textSizeClassName="text-sm"
+                            className="border-2 border-slate-100 shadow-xs"
                           />
                           <div>
                             <h3 className="font-bold text-slate-900 text-sm">{dev.full_name}</h3>
                             <p className="text-xs text-slate-500">{dev.email}</p>
                           </div>
                         </div>
-                        <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">
-                          Active
-                        </span>
+
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">
+                            Active
+                          </span>
+                          <button
+                            onClick={() => handleDelete(dev.id, dev.full_name)}
+                            disabled={deletingId === dev.id}
+                            title={
+                              assignedCount > 0
+                                ? `Assigned to ${assignedCount} project(s). Remove from projects first to delete.`
+                                : 'Delete developer'
+                            }
+                            className={`p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition ${
+                              assignedCount > 0 ? 'opacity-60 cursor-not-allowed' : ''
+                            }`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
 
                       <div className="mt-5 grid grid-cols-3 gap-2 border-t border-b border-slate-100 py-3 text-center text-xs">
@@ -82,7 +165,7 @@ export default function DevelopersPage() {
                         </div>
                         <div>
                           <p className="text-[10px] text-slate-400 font-semibold uppercase">Hours</p>
-                          <p className="text-sm font-extrabold text-blue-600 mt-0.5">{dev.total_hours_logged || 0}h</p>
+                          <p className="text-sm font-extrabold text-blue-600 mt-0.5">{totalHours}h</p>
                         </div>
                       </div>
 
@@ -90,7 +173,13 @@ export default function DevelopersPage() {
                         <span className="text-[11px] text-slate-500 flex items-center gap-1">
                           <Clock className="h-3 w-3 text-slate-400" /> Daily report: 5:00 PM
                         </span>
-                        <span className="text-blue-600 font-semibold text-[11px]">Active Member</span>
+                        {assignedCount > 0 ? (
+                          <span className="text-blue-600 font-semibold text-[11px] bg-blue-50 px-2 py-0.5 rounded-md">
+                            {assignedCount} Assigned
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-medium text-[11px]">Unassigned</span>
+                        )}
                       </div>
                     </div>
                   );
@@ -103,7 +192,7 @@ export default function DevelopersPage() {
                 </div>
                 <h3 className="text-base font-bold text-slate-900">No Developers Invited Yet</h3>
                 <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">
-                  Invite your developers via email. Developers join freely under your paid Admin license.
+                  Invite your developers with email and password. They will receive an email via Resend to log in.
                 </p>
                 <button
                   onClick={() => setIsInviteOpen(true)}

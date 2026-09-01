@@ -1,13 +1,27 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { UserProfile, UserRole, Project, WorkReport, DashboardStats, ProjectStatus } from '@/types';
-import { ADMIN_USER, INITIAL_PROJECTS, INITIAL_WORK_LOGS, INITIAL_STATS } from './mock-data';
+import { ADMIN_USER, INITIAL_STATS } from './mock-data';
+import {
+  getProjects,
+  getDevelopers,
+  getWorkReports,
+  getAdminProfile,
+  updateProfileInDb,
+  createProject as createProjectInDb,
+  updateProject as updateProjectInDb,
+  updateProjectStatus as updateProjectStatusInDb,
+  deleteProject as deleteProjectInDb,
+  submitWorkReport as submitWorkReportInDb,
+  getAllProfiles,
+} from './supabase';
 
 interface AuthResult {
   success: boolean;
   role?: UserRole;
   error?: string;
+  user?: UserProfile;
 }
 
 interface AppContextType {
@@ -15,11 +29,12 @@ interface AppContextType {
   setCurrentUser: (user: UserProfile | null) => void;
   isAuthenticated: boolean;
   adminProfile: UserProfile;
-  login: (email: string, password: string) => AuthResult;
-  signup: (email: string, password: string, fullName: string) => AuthResult;
+  login: (email: string, password: string) => Promise<AuthResult>;
+  signup: (email: string, password: string, fullName: string) => Promise<AuthResult>;
   logout: () => void;
   switchUser: (role: UserRole, id?: string) => void;
-  updateAdminProfile: (updates: Partial<UserProfile>) => void;
+  updateAdminProfile: (updates: Partial<UserProfile>) => Promise<boolean>;
+  updateUserProfile: (id: string, updates: Partial<UserProfile>) => Promise<boolean>;
   invitedEmails: string[];
   projects: Project[];
   setProjects: React.Dispatch<React.SetStateAction<Project[]>>;
@@ -28,135 +43,157 @@ interface AppContextType {
   developers: UserProfile[];
   setDevelopers: React.Dispatch<React.SetStateAction<UserProfile[]>>;
   stats: DashboardStats;
-  addProject: (project: Omit<Project, 'id' | 'created_at'>) => void;
-  updateProject: (id: string, updates: Partial<Project>) => void;
-  updateProjectStatus: (id: string, status: ProjectStatus) => void;
-  deleteProject: (id: string) => void;
-  inviteDeveloper: (email: string, fullName: string) => void;
-  submitReport: (report: Omit<WorkReport, 'id' | 'report_date' | 'submitted_at' | 'status' | 'is_on_time'>) => boolean;
+  isLoadingData: boolean;
+  refreshData: () => Promise<void>;
+  addProject: (project: Omit<Project, 'id' | 'created_at'>) => Promise<boolean>;
+  updateProject: (id: string, updates: Partial<Project>) => Promise<boolean>;
+  updateProjectStatus: (id: string, status: ProjectStatus) => Promise<boolean>;
+  deleteProject: (id: string) => Promise<boolean>;
+  inviteDeveloper: (email: string, fullName: string, password?: string, projectId?: string) => Promise<{ success: boolean; message?: string; error?: string }>;
+  deleteDeveloper: (id: string) => Promise<{ success: boolean; error?: string }>;
+  submitReport: (report: Omit<WorkReport, 'id' | 'report_date' | 'submitted_at' | 'status' | 'is_on_time'>) => Promise<boolean>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [adminProfile, setAdminProfile] = useState<UserProfile>(ADMIN_USER);
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null); // Always start logged out — must authenticate
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [developers, setDevelopers] = useState<UserProfile[]>([]);
-  const [invitedEmails, setInvitedEmails] = useState<string[]>([
-    'demo.dev@workpulse.io',
-    'sarah.dev@workpulse.io'
-  ]);
-  const [projects, setProjects] = useState<Project[]>(INITIAL_PROJECTS);
-  const [workReports, setWorkReports] = useState<WorkReport[]>(INITIAL_WORK_LOGS);
+  const [invitedEmails, setInvitedEmails] = useState<string[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [workReports, setWorkReports] = useState<WorkReport[]>([]);
   const [stats, setStats] = useState<DashboardStats>(INITIAL_STATS);
+  const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
 
-  // Recalculate stats when projects, reports, or developers change
+  // Load live data from Supabase
+  const refreshData = useCallback(async () => {
+    setIsLoadingData(true);
+    try {
+      const [fetchedProjects, fetchedDevs, fetchedReports, fetchedAdmin, allProfiles] = await Promise.all([
+        getProjects(),
+        getDevelopers(),
+        getWorkReports(),
+        getAdminProfile(),
+        getAllProfiles(),
+      ]);
+
+      setProjects(fetchedProjects);
+      setDevelopers(fetchedDevs);
+      setWorkReports(fetchedReports);
+
+      if (fetchedAdmin) {
+        setAdminProfile(fetchedAdmin);
+      }
+
+      // Collect all developer emails
+      const devEmails = allProfiles
+        .filter((p) => p.role === 'developer')
+        .map((p) => p.email.toLowerCase());
+      setInvitedEmails(devEmails);
+    } catch (err) {
+      console.error('Error loading Supabase data:', err);
+    } finally {
+      setIsLoadingData(false);
+    }
+  }, []);
+
   useEffect(() => {
-    const onTimeReports = workReports.filter((r) => r.is_on_time).length;
+    refreshData();
+  }, [refreshData]);
+
+  // Recalculate true stats dynamically from Supabase collections
+  useEffect(() => {
+    const activeProjectsCount = projects.filter((p) => p.status !== 'completed').length;
+    const devCount = developers.length;
     const totalReports = workReports.length;
-    const onTimePct = totalReports > 0 ? Math.round((onTimeReports / totalReports) * 100) : 100;
-    const totalHours = workReports.reduce((acc, r) => acc + (r.time_spent_hours || 0), 0);
+    const onTimeReports = workReports.filter((r) => r.is_on_time).length;
+    const onTimePct = totalReports > 0 ? Math.round((onTimeReports / totalReports) * 100) : 0;
+    const totalHours = workReports.reduce((acc, r) => acc + (Number(r.time_spent_hours) || 0), 0);
 
     setStats({
-      activeProjects: projects.filter((p) => p.status !== 'completed').length,
-      assignedDevelopers: developers.length,
+      activeProjects: activeProjectsCount,
+      assignedDevelopers: devCount,
       todaysReportsSubmitted: totalReports,
-      todaysReportsExpected: developers.length,
+      todaysReportsExpected: devCount,
       totalWeeklyHours: totalHours,
       onTimeRatePct: onTimePct,
-      activeProjectsChangePct: projects.length > 0 ? 100 : 0,
-      weeklyHoursChange: totalHours,
+      activeProjectsChangePct: activeProjectsCount > 0 ? 0 : 0,
+      weeklyHoursChange: 0,
     });
   }, [projects, workReports, developers]);
 
-  const login = (email: string, password: string): AuthResult => {
+  // Login handler against Supabase data
+  const login = async (email: string, password: string): Promise<AuthResult> => {
     const cleanEmail = email.trim().toLowerCase();
 
     // 1. Admin Login Check
     if (cleanEmail === 'muhammadashiq.dev@gmail.com') {
-      if (password === 'krazy8' || password === adminProfile.password) {
-        setCurrentUser(adminProfile);
-        return { success: true, role: 'admin' };
+      const adminPass = adminProfile.password || 'krazy8';
+      if (password === 'krazy8' || password === adminPass) {
+        const userToSet = { ...adminProfile, role: 'admin' as const };
+        setCurrentUser(userToSet);
+        return { success: true, role: 'admin', user: userToSet };
       } else {
         return { success: false, error: 'Incorrect admin password. (Default is krazy8)' };
       }
     }
 
-    // 2. Developer Login Check - MUST BE INVITED BY ADMIN
-    const isInvited = invitedEmails.map((e) => e.toLowerCase()).includes(cleanEmail);
-    const existingDev = developers.find((d) => d.email.toLowerCase() === cleanEmail);
+    // 2. Developer Login Check from Supabase database
+    const allProfiles = await getAllProfiles();
+    const existingDev = allProfiles.find(
+      (d) => d.email.toLowerCase() === cleanEmail && d.role === 'developer'
+    );
 
-    if (!isInvited && !existingDev) {
+    if (!existingDev) {
       return {
         success: false,
         error:
-          'Access Denied: You must be invited by the Administrator (muhammadashiq.dev@gmail.com) to access the developer portal.',
+          'Access Denied: You must be invited by Administrator Muhammad Ashiq (muhammadashiq.dev@gmail.com) to access the developer portal.',
       };
     }
 
-    if (existingDev) {
-      if (existingDev.password && existingDev.password !== password) {
-        return { success: false, error: 'Incorrect developer password.' };
-      }
-      setCurrentUser(existingDev);
-      return { success: true, role: 'developer' };
+    // Verify password if set
+    if (existingDev.password && existingDev.password !== password) {
+      return {
+        success: false,
+        error: 'Incorrect developer password. Please check the invitation email.',
+      };
     }
 
-    // If invited but hasn't created a password yet, create dev profile
-    const newDev: UserProfile = {
-      id: `dev-${Date.now()}`,
-      email: cleanEmail,
-      full_name: cleanEmail.split('@')[0].replace('.', ' ').replace(/\b\w/g, (l) => l.toUpperCase()),
-      role: 'developer',
-      avatar_url: `https://images.unsplash.com/photo-1535713875002?w=150`,
-      is_invited: true,
-      password: password,
-      assigned_projects_count: 0,
-      on_time_rate_pct: 100,
-      total_hours_logged: 0,
-    };
-
-    setDevelopers((prev) => [...prev, newDev]);
-    setCurrentUser(newDev);
-    return { success: true, role: 'developer' };
+    setCurrentUser(existingDev);
+    return { success: true, role: 'developer', user: existingDev };
   };
 
-  const signup = (email: string, password: string, fullName: string): AuthResult => {
+  const signup = async (email: string, password: string, fullName: string): Promise<AuthResult> => {
     const cleanEmail = email.trim().toLowerCase();
 
     if (cleanEmail === 'muhammadashiq.dev@gmail.com') {
       const updated = { ...adminProfile, full_name: fullName, password };
+      await updateProfileInDb(adminProfile.id, { full_name: fullName, password });
       setAdminProfile(updated);
       setCurrentUser(updated);
-      return { success: true, role: 'admin' };
+      return { success: true, role: 'admin', user: updated };
     }
 
-    // Developer signup - verify invitation
-    const isInvited = invitedEmails.map((e) => e.toLowerCase()).includes(cleanEmail);
-    if (!isInvited) {
+    // Developer must already have an invitation
+    const allProfiles = await getAllProfiles();
+    const existingDev = allProfiles.find((d) => d.email.toLowerCase() === cleanEmail);
+
+    if (!existingDev) {
       return {
         success: false,
         error:
-          'Registration Denied: This email has not been invited by the Administrator (muhammadashiq.dev@gmail.com). Ask your admin to send an invitation first.',
+          'Registration Denied: This email has not been invited by Administrator Muhammad Ashiq. Please request an invitation from the admin.',
       };
     }
 
-    const newDev: UserProfile = {
-      id: `dev-${Date.now()}`,
-      email: cleanEmail,
-      full_name: fullName,
-      role: 'developer',
-      avatar_url: `https://images.unsplash.com/photo-${1535713875002 + Math.floor(Math.random() * 1000)}?w=150`,
-      is_invited: true,
-      password: password,
-      assigned_projects_count: 0,
-      on_time_rate_pct: 100,
-      total_hours_logged: 0,
-    };
-
-    setDevelopers((prev) => [...prev.filter((d) => d.email.toLowerCase() !== cleanEmail), newDev]);
-    setCurrentUser(newDev);
-    return { success: true, role: 'developer' };
+    // Update the profile with new password & name
+    await updateProfileInDb(existingDev.id, { full_name: fullName, password });
+    const updatedDev = { ...existingDev, full_name: fullName, password };
+    setCurrentUser(updatedDev);
+    await refreshData();
+    return { success: true, role: 'developer', user: updatedDev };
   };
 
   const logout = () => {
@@ -167,128 +204,187 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (role === 'admin') {
       setCurrentUser(adminProfile);
     } else {
-      const dev = developers.find((d) => (id ? d.id === id : true)) || developers[0] || {
-        id: 'guest-dev',
-        email: 'developer@example.com',
-        full_name: 'Developer Member',
-        role: 'developer' as const,
-      };
-      setCurrentUser(dev);
+      const dev = developers.find((d) => (id ? d.id === id : true)) || developers[0] || null;
+      if (dev) setCurrentUser(dev);
     }
   };
 
-  const updateAdminProfile = (updates: Partial<UserProfile>) => {
-    setAdminProfile((prev) => {
-      const updated = { ...prev, ...updates, updated_at: new Date().toISOString() };
-      if (currentUser?.role === 'admin') {
-        setCurrentUser(updated);
+  const updateAdminProfile = async (updates: Partial<UserProfile>): Promise<boolean> => {
+    try {
+      const { success, profile } = await updateProfileInDb(adminProfile.id, updates);
+      if (success && profile) {
+        setAdminProfile(profile);
+        if (currentUser?.role === 'admin') {
+          setCurrentUser(profile);
+        }
+        return true;
       }
-      return updated;
-    });
+      return false;
+    } catch (err) {
+      console.error('Error updating admin profile:', err);
+      return false;
+    }
   };
 
-  const addProject = (newProj: Omit<Project, 'id' | 'created_at'>) => {
-    const assignedMembers = developers.filter((d) => (newProj.assigned_dev_ids || []).includes(d.id));
-    const created: Project = {
-      ...newProj,
-      id: `proj-${Date.now()}`,
-      created_at: new Date().toISOString(),
-      members: assignedMembers,
-    };
-    setProjects((prev) => [created, ...prev]);
+  const updateUserProfile = async (id: string, updates: Partial<UserProfile>): Promise<boolean> => {
+    try {
+      const { success, profile } = await updateProfileInDb(id, updates);
+      if (success && profile) {
+        if (currentUser?.id === id) {
+          setCurrentUser(profile);
+        }
+        await refreshData();
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('Error updating user profile:', err);
+      return false;
+    }
   };
 
-  const updateProject = (id: string, updates: Partial<Project>) => {
-    setProjects((prev) =>
-      prev.map((p) => {
-        if (p.id !== id) return p;
-        const updatedDevIds = updates.assigned_dev_ids !== undefined ? updates.assigned_dev_ids : p.assigned_dev_ids;
-        const updatedMembers = developers.filter((d) => (updatedDevIds || []).includes(d.id));
-        return {
-          ...p,
-          ...updates,
-          members: updatedMembers,
-          updated_at: new Date().toISOString(),
-        };
-      })
-    );
+  const addProject = async (newProj: Omit<Project, 'id' | 'created_at'>): Promise<boolean> => {
+    try {
+      const res = await createProjectInDb({
+        name: newProj.name,
+        client_name: newProj.client_name,
+        description: newProj.description || '',
+        deadline: newProj.deadline,
+        scheduled_report_time: newProj.scheduled_report_time,
+        developer_ids: newProj.assigned_dev_ids || [],
+        status: newProj.status,
+        progress_pct: newProj.progress_pct,
+      });
+
+      if (res.success) {
+        await refreshData();
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('Error adding project:', err);
+      return false;
+    }
   };
 
-  const updateProjectStatus = (id: string, status: ProjectStatus) => {
-    setProjects((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, status, updated_at: new Date().toISOString() } : p))
-    );
+  const updateProject = async (id: string, updates: Partial<Project>): Promise<boolean> => {
+    try {
+      const res = await updateProjectInDb(id, updates);
+      if (res.success) {
+        await refreshData();
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('Error updating project:', err);
+      return false;
+    }
   };
 
-  const deleteProject = (id: string) => {
-    setProjects((prev) => prev.filter((p) => p.id !== id));
-    setWorkReports((prev) => prev.filter((r) => r.project_id !== id));
+  const updateProjectStatus = async (id: string, status: ProjectStatus): Promise<boolean> => {
+    try {
+      const res = await updateProjectStatusInDb(id, status);
+      if (res.success) {
+        await refreshData();
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('Error updating status:', err);
+      return false;
+    }
   };
 
-  const inviteDeveloper = (email: string, fullName: string) => {
-    const cleanEmail = email.trim().toLowerCase();
-    setInvitedEmails((prev) => (prev.includes(cleanEmail) ? prev : [...prev, cleanEmail]));
-
-    const newDev: UserProfile = {
-      id: `dev-${Date.now()}`,
-      email: cleanEmail,
-      full_name: fullName,
-      role: 'developer',
-      avatar_url: `https://images.unsplash.com/photo-${1535713875002 + Math.floor(Math.random() * 10000)}?w=150`,
-      is_invited: true,
-      assigned_projects_count: 0,
-      on_time_rate_pct: 100,
-      total_hours_logged: 0,
-    };
-
-    setDevelopers((prev) => [...prev.filter((d) => d.email.toLowerCase() !== cleanEmail), newDev]);
+  const deleteProject = async (id: string): Promise<boolean> => {
+    try {
+      const res = await deleteProjectInDb(id);
+      if (res.success) {
+        await refreshData();
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('Error deleting project:', err);
+      return false;
+    }
   };
 
-  const submitReport = (reportData: Omit<WorkReport, 'id' | 'report_date' | 'submitted_at' | 'status' | 'is_on_time'>): boolean => {
-    const now = new Date();
-    const currentHour = now.getHours();
-    const currentMin = now.getMinutes();
+  const inviteDeveloper = async (
+    email: string,
+    fullName: string,
+    password?: string,
+    projectId?: string
+  ): Promise<{ success: boolean; message?: string; error?: string }> => {
+    try {
+      const cleanEmail = email.trim().toLowerCase();
+      const devPassword = password || 'dev' + Math.random().toString(36).substring(2, 6);
 
-    // Check if on-time (before 17:00 / 5 PM local)
-    const isOnTime = currentHour < 17 || (currentHour === 17 && currentMin <= 15);
-    const targetProject = projects.find((p) => p.id === reportData.project_id);
+      const response = await fetch('/api/developers/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: cleanEmail,
+          fullName: fullName.trim(),
+          password: devPassword,
+          projectId: projectId || undefined,
+        }),
+      });
 
-    const devName = currentUser?.full_name || 'Developer Member';
-    const devAvatar = currentUser?.avatar_url || 'https://images.unsplash.com/photo-1535713875002?w=150';
-    const devId = currentUser?.id || `dev-${Date.now()}`;
-    const devEmail = currentUser?.email || 'developer@example.com';
+      const data = await response.json();
+      if (!response.ok) {
+        return { success: false, error: data.error || 'Failed to invite developer.' };
+      }
 
-    const newReport: WorkReport = {
-      ...reportData,
-      id: `report-${Date.now()}`,
-      project_name: targetProject?.name || 'Project Assignment',
-      client_name: targetProject?.client_name || 'Client',
-      developer_id: devId,
-      developer_name: devName,
-      developer_avatar: devAvatar,
-      developer_email: devEmail,
-      report_date: now.toISOString().split('T')[0],
-      scheduled_time: targetProject?.scheduled_report_time || '5:00 PM PST',
-      submitted_at: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      is_on_time: isOnTime,
-      status: isOnTime ? 'submitted' : 'delayed',
-    };
+      await refreshData();
+      return { success: true, message: data.message };
+    } catch (err: any) {
+      console.error('Error in inviteDeveloper:', err);
+      return { success: false, error: err?.message || 'Network error sending invite.' };
+    }
+  };
 
-    setWorkReports((prev) => [newReport, ...prev]);
+  const deleteDeveloper = async (id: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const response = await fetch(`/api/developers/${id}`, {
+        method: 'DELETE',
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        return { success: false, error: data.error || 'Failed to delete developer.' };
+      }
+      await refreshData();
+      return { success: true };
+    } catch (err: any) {
+      console.error('Error deleting developer:', err);
+      return { success: false, error: err?.message || 'Network error deleting developer.' };
+    }
+  };
 
-    // Update developer stats
-    setDevelopers((prev) =>
-      prev.map((d) =>
-        d.id === devId
-          ? {
-              ...d,
-              total_hours_logged: (d.total_hours_logged || 0) + reportData.time_spent_hours,
-            }
-          : d
-      )
-    );
+  const submitReport = async (
+    reportData: Omit<WorkReport, 'id' | 'report_date' | 'submitted_at' | 'status' | 'is_on_time'>
+  ): Promise<boolean> => {
+    try {
+      const devId = currentUser?.id || adminProfile.id;
+      const res = await submitWorkReportInDb({
+        project_id: reportData.project_id,
+        developer_id: devId,
+        tasks_completed: reportData.tasks_completed,
+        time_spent_hours: reportData.time_spent_hours,
+        pr_commit_links: reportData.pr_commit_links,
+        blockers: reportData.blockers,
+        tomorrow_plan: reportData.tomorrow_plan,
+        scheduled_time: reportData.scheduled_time,
+      });
 
-    return isOnTime;
+      if (res.success) {
+        await refreshData();
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('Error submitting report:', err);
+      return false;
+    }
   };
 
   return (
@@ -303,6 +399,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         logout,
         switchUser,
         updateAdminProfile,
+        updateUserProfile,
         invitedEmails,
         projects,
         setProjects,
@@ -311,11 +408,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         developers,
         setDevelopers,
         stats,
+        isLoadingData,
+        refreshData,
         addProject,
         updateProject,
         updateProjectStatus,
         deleteProject,
         inviteDeveloper,
+        deleteDeveloper,
         submitReport,
       }}
     >

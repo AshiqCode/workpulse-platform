@@ -6,11 +6,31 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { PaywallGate } from '@/components/layout/PaywallGate';
 import { InviteDeveloperModal } from '@/components/modals/InviteDeveloperModal';
 import { useApp } from '@/lib/auth-context';
-import { UserPlus, Shield, User } from 'lucide-react';
+import { UserAvatar } from '@/components/ui/UserAvatar';
+import { UserPlus, Shield, Trash2, AlertCircle } from 'lucide-react';
 
 export default function TeamPage() {
-  const { developers, adminProfile } = useApp();
+  const { developers, adminProfile, projects, deleteDeveloper } = useApp();
   const [isInviteOpen, setIsInviteOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleDelete = async (devId: string, devName: string) => {
+    setDeleteError(null);
+    const assigned = projects.filter((p) => (p.assigned_dev_ids || []).includes(devId));
+    if (assigned.length > 0) {
+      setDeleteError(`Cannot delete ${devName}: assigned to ${assigned.map(p => `"${p.name}"`).join(', ')}. Remove from projects first.`);
+      return;
+    }
+
+    if (!confirm(`Delete developer ${devName}?`)) return;
+    setDeletingId(devId);
+    const res = await deleteDeveloper(devId);
+    setDeletingId(null);
+    if (!res.success) {
+      setDeleteError(res.error || 'Failed to delete');
+    }
+  };
 
   return (
     <PaywallGate requiredRole="admin">
@@ -37,6 +57,13 @@ export default function TeamPage() {
               </button>
             </div>
 
+            {deleteError && (
+              <div className="flex items-center gap-2 rounded-xl bg-rose-50 p-3 text-rose-700 border border-rose-200 text-xs">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{deleteError}</span>
+              </div>
+            )}
+
             <div className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs">
               <h2 className="text-base font-bold text-slate-900 mb-4">Active Team Members ({developers.length + 1})</h2>
 
@@ -44,10 +71,12 @@ export default function TeamPage() {
                 {/* Admin Muhammad Ashiq */}
                 <div className="flex items-center justify-between py-3.5">
                   <div className="flex items-center gap-3">
-                    <img
-                      src={adminProfile.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
-                      alt={adminProfile.full_name}
-                      className="h-10 w-10 rounded-full object-cover border-2 border-blue-500 shadow-xs"
+                    <UserAvatar
+                      avatarUrl={adminProfile.avatar_url}
+                      name={adminProfile.full_name}
+                      email={adminProfile.email}
+                      sizeClassName="h-10 w-10"
+                      className="border-2 border-blue-500 shadow-xs"
                     />
                     <div>
                       <p className="text-xs font-bold text-slate-900">{adminProfile.full_name} (Owner)</p>
@@ -60,24 +89,38 @@ export default function TeamPage() {
                 </div>
 
                 {/* Developers */}
-                {developers.map((dev) => (
-                  <div key={dev.id} className="flex items-center justify-between py-3.5">
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={dev.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'}
-                        alt={dev.full_name}
-                        className="h-10 w-10 rounded-full object-cover"
-                      />
-                      <div>
-                        <p className="text-xs font-bold text-slate-900">{dev.full_name}</p>
-                        <p className="text-[11px] text-slate-500">{dev.email}</p>
+                {developers.map((dev) => {
+                  const isAssigned = projects.some((p) => (p.assigned_dev_ids || []).includes(dev.id));
+                  return (
+                    <div key={dev.id} className="flex items-center justify-between py-3.5">
+                      <div className="flex items-center gap-3">
+                        <UserAvatar
+                          avatarUrl={dev.avatar_url}
+                          name={dev.full_name}
+                          email={dev.email}
+                          sizeClassName="h-10 w-10"
+                        />
+                        <div>
+                          <p className="text-xs font-bold text-slate-900">{dev.full_name}</p>
+                          <p className="text-[11px] text-slate-500">{dev.email}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="rounded-full bg-emerald-50 border border-emerald-200 px-3 py-0.5 text-[11px] font-bold text-emerald-700">
+                          Invited Developer
+                        </span>
+                        <button
+                          onClick={() => handleDelete(dev.id, dev.full_name)}
+                          disabled={deletingId === dev.id}
+                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                          title={isAssigned ? 'Assigned to project(s). Remove from projects first to delete.' : 'Delete developer'}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
                     </div>
-                    <span className="rounded-full bg-emerald-50 border border-emerald-200 px-3 py-0.5 text-[11px] font-bold text-emerald-700">
-                      Invited Developer
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </main>

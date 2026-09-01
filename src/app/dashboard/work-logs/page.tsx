@@ -22,7 +22,7 @@ export default function WorkLogsPage() {
               </p>
             </div>
 
-            <WorkLogTable title="All Team Work Reports" showFilters={true} />
+            <WorkLogTable />
           </main>
         </div>
       </div>

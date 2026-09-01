@@ -16,30 +16,36 @@ import {
   Sparkles,
   ChevronRight,
   FileText,
-  UserCheck
+  UserCheck,
+  User as UserIcon,
+  LogOut
 } from 'lucide-react';
 import { useApp } from '@/lib/auth-context';
 import { WorkReportModal } from '@/components/modals/WorkReportModal';
 import { PaywallGate } from '@/components/layout/PaywallGate';
+import { AdminProfileModal } from '@/components/modals/AdminProfileModal';
+import { UserAvatar } from '@/components/ui/UserAvatar';
+import { useRouter } from 'next/navigation';
 
 export default function DeveloperPortalPage() {
-  const { currentUser, switchUser, projects, workReports, developers } = useApp();
+  const router = useRouter();
+  const { currentUser, projects, workReports, logout } = useApp();
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [currentTime, setCurrentTime] = useState<string>('');
-  const [timeRemaining, setTimeRemaining] = useState<string>('01h 15m remaining');
 
   // Task checklist local state for interactive demo
   const [tasksState, setTasksState] = useState([
-    { id: 1, text: 'Implement frontend UI components and review PR #12', completed: true, priority: 'High', project: 'Assigned Project' },
-    { id: 2, text: 'Resolve pending unit test failures and database index optimization', completed: false, priority: 'High', project: 'Assigned Project' },
-    { id: 3, text: 'Submit daily work report before 5:00 PM deadline', completed: false, priority: 'Medium', project: 'Assigned Project' },
+    { id: 1, text: 'Review assigned tasks and check project sprint board', completed: true, priority: 'High' },
+    { id: 2, text: 'Complete planned commits and push PR to repository', completed: false, priority: 'High' },
+    { id: 3, text: 'Submit daily work report before 5:00 PM deadline', completed: false, priority: 'Medium' },
   ]);
 
   useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date();
-      setCurrentTime(now.toLocaleTimeString());
+      setCurrentTime(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     }, 1000);
     return () => clearInterval(timer);
   }, []);
@@ -55,283 +61,284 @@ export default function DeveloperPortalPage() {
     email: 'developer@example.com',
     full_name: 'Developer Member',
     role: 'developer' as const,
-    avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
-    total_hours_logged: 0,
+    avatar_url: undefined,
   };
 
-  // Find projects assigned to current developer
+  // Find projects assigned to current developer in Supabase
   const myProjects = projects.filter((p) =>
     (p.assigned_dev_ids || []).includes(devUser.id)
   );
   const displayProjects = myProjects.length > 0 ? myProjects : projects;
 
-  // Current developer's reports
+  // Current developer's reports in Supabase
   const myReports = workReports.filter((r) => r.developer_id === devUser.id);
-  const displayReports = myReports.length > 0 ? myReports : workReports;
-  const onTimeCount = displayReports.filter((r) => r.is_on_time).length;
-  const onTimePct = displayReports.length > 0 ? Math.round((onTimeCount / (displayReports.length || 1)) * 100) : 100;
+  const onTimeCount = myReports.filter((r) => r.is_on_time).length;
+  const onTimePct = myReports.length > 0 ? Math.round((onTimeCount / myReports.length) * 100) : 0;
+  const totalHoursLogged = myReports.reduce((acc, r) => acc + (Number(r.time_spent_hours) || 0), 0);
+
+  const handleSignOut = () => {
+    logout();
+    router.push('/login');
+  };
 
   return (
     <PaywallGate requiredRole="developer">
-    <div className="min-h-screen bg-[#F8FAFC]">
-      {/* Top Portal Header */}
-      <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-slate-200 bg-white/95 px-6 backdrop-blur-md">
-        <div className="flex items-center gap-4">
-          <Link href="/dashboard" className="flex items-center gap-2 text-slate-500 hover:text-slate-900 transition text-xs font-semibold">
-            <ArrowLeft className="h-4 w-4" />
-            <span className="hidden sm:inline">Admin Dashboard</span>
-          </Link>
-          <div className="h-4 w-px bg-slate-200 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-xs">
-              <Activity className="h-4 w-4" />
-            </div>
-            <span className="text-sm font-bold text-slate-900">Developer Work Portal</span>
-          </div>
-        </div>
-
-        {/* Center Banner: Report Due Countdown */}
-        <div className="hidden md:flex items-center gap-2.5 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-1.5 text-xs text-emerald-900 font-medium">
-          <Clock className="h-3.5 w-3.5 text-emerald-600 animate-pulse" />
-          <span>
-            Daily Report Due at <strong>5:00 PM</strong> (<span className="text-emerald-700 font-bold">{timeRemaining}</span>)
-          </span>
-        </div>
-
-        {/* Right: Switch developer & Submit Report CTA */}
-        <div className="flex items-center gap-3">
-          {developers.length > 0 && (
-            <select
-              value={devUser.id}
-              onChange={(e) => switchUser('developer', e.target.value)}
-              className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-800 focus:outline-none"
-            >
-              {developers.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.full_name}
-                </option>
-              ))}
-            </select>
-          )}
-
-          <button
-            onClick={() => {
-              setSelectedProjectId(displayProjects[0]?.id || '');
-              setIsReportModalOpen(true);
-            }}
-            className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm shadow-emerald-600/20 hover:bg-emerald-700 active:scale-98 transition"
-          >
-            <Send className="h-3.5 w-3.5" />
-            <span>Submit Daily Report</span>
-          </button>
-        </div>
-      </header>
-
-      {/* Main Workspace */}
-      <main className="p-6 md:p-8 space-y-6 max-w-7xl mx-auto">
-        {/* Welcome greeting banner */}
-        <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="min-h-screen bg-[#F8FAFC]">
+        {/* Top Portal Header */}
+        <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-slate-200 bg-white/95 px-6 backdrop-blur-md">
           <div className="flex items-center gap-4">
-            <img
-              src={devUser.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'}
-              alt={devUser.full_name}
-              className="h-14 w-14 rounded-full border-2 border-emerald-200 object-cover shadow-sm"
-            />
-            <div>
-              <h1 className="text-xl font-extrabold text-slate-900">
-                Welcome back, {devUser.full_name} 👋
-              </h1>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Invited Engineer · You have <strong>{tasksState.filter((t) => !t.completed).length} pending items</strong> for today.
-              </p>
+            <Link href="/dashboard" className="flex items-center gap-2 text-slate-500 hover:text-slate-900 transition text-xs font-semibold">
+              <ArrowLeft className="h-4 w-4" />
+              <span className="hidden sm:inline">Admin Dashboard</span>
+            </Link>
+            <div className="h-4 w-[1px] bg-slate-200" />
+            <div className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-white font-bold text-xs">
+                <Activity className="h-4 w-4" />
+              </div>
+              <span className="font-extrabold text-sm text-slate-900 tracking-tight">WorkPulse <span className="text-blue-600 font-bold text-xs ml-1 bg-blue-50 px-2 py-0.5 rounded-md">Developer Portal</span></span>
             </div>
           </div>
 
+          {/* Right Side: Profile & Quick Actions */}
           <div className="flex items-center gap-3">
-            <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2 text-center">
-              <p className="text-[10px] text-slate-400 font-bold uppercase">Local Clock</p>
-              <p className="text-xs font-mono font-bold text-slate-800">{currentTime || '05:00:00 PM'}</p>
-            </div>
             <button
-              onClick={() => setIsReportModalOpen(true)}
-              className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800 transition"
+              onClick={() => setIsProfileModalOpen(true)}
+              className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-2xs"
             >
-              Open Report Dialog
+              <UserAvatar
+                avatarUrl={devUser.avatar_url}
+                name={devUser.full_name}
+                email={devUser.email}
+                sizeClassName="h-6 w-6"
+                textSizeClassName="text-[9px]"
+              />
+              <span className="hidden sm:inline">Edit Profile & DP</span>
+            </button>
+
+            <button
+              onClick={handleSignOut}
+              className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Sign Out</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setSelectedProjectId(displayProjects[0]?.id || '');
+                setIsReportModalOpen(true);
+              }}
+              className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm shadow-blue-600/20 hover:bg-blue-700 active:scale-98 transition"
+            >
+              <Send className="h-3.5 w-3.5" />
+              <span>Submit Daily Work Report</span>
             </button>
           </div>
-        </div>
+        </header>
 
-        {/* 2-Column Grid (Left: Tasks & Projects, Right: Developer Statistics) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left Column: Tasks & Projects */}
-          <div className="lg:col-span-8 space-y-6">
-            {/* My Assigned Tasks Checklist */}
-            <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-xs">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
+        {/* Main Content */}
+        <main className="p-6 sm:p-8 max-w-[1400px] mx-auto space-y-6">
+          {/* Welcome & Timer Hero Banner */}
+          <div className="rounded-3xl bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
+            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="flex items-center gap-4">
+                <UserAvatar
+                  avatarUrl={devUser.avatar_url}
+                  name={devUser.full_name}
+                  email={devUser.email}
+                  sizeClassName="h-16 w-16"
+                  textSizeClassName="text-xl"
+                  className="border-2 border-blue-400 shadow-md"
+                />
                 <div>
-                  <h2 className="text-base font-bold text-slate-900">Today's Assigned Tasks</h2>
-                  <p className="text-xs text-slate-500">Check off items as you complete them before report submission</p>
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-xl sm:text-2xl font-black">Welcome, {devUser.full_name}</h1>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 px-2.5 py-0.5 text-[11px] font-bold text-emerald-300">
+                      <UserCheck className="h-3 w-3" /> Active
+                    </span>
+                  </div>
+                  <p className="text-xs text-blue-200 mt-1">
+                    Scheduled Daily Report Deadline: <strong className="text-white">5:00 PM PST</strong>
+                  </p>
                 </div>
-                <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700 border border-blue-200">
-                  {tasksState.filter((t) => t.completed).length}/{tasksState.length} Done
-                </span>
               </div>
 
-              <div className="space-y-2.5">
+              {/* Deadline & Clock status */}
+              <div className="flex items-center gap-4 bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10">
+                <div className="text-right">
+                  <p className="text-[10px] uppercase font-bold text-blue-200 tracking-wider">Current Time</p>
+                  <p className="text-lg font-mono font-bold text-white mt-0.5">{currentTime || 'Loading...'}</p>
+                </div>
+                <div className="h-8 w-[1px] bg-white/20" />
+                <div>
+                  <p className="text-[10px] uppercase font-bold text-blue-200 tracking-wider">Scheduled Time</p>
+                  <p className="text-sm font-bold text-emerald-300 mt-0.5 flex items-center gap-1">
+                    <Clock className="h-4 w-4" /> 5:00 PM Daily
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* KPI Stat Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
+              <p className="text-xs font-semibold text-slate-500 uppercase">Assigned Projects</p>
+              <p className="text-2xl font-black text-slate-900 mt-1">{myProjects.length}</p>
+              <p className="text-xs text-slate-400 mt-1">{projects.length} available in workspace</p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
+              <p className="text-xs font-semibold text-slate-500 uppercase">On-Time Report Rate</p>
+              <p className="text-2xl font-black text-emerald-600 mt-1">{onTimePct}%</p>
+              <p className="text-xs text-slate-400 mt-1">{onTimeCount} of {myReports.length} reports on-time</p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
+              <p className="text-xs font-semibold text-slate-500 uppercase">Total Hours Logged</p>
+              <p className="text-2xl font-black text-blue-600 mt-1">{totalHoursLogged}h</p>
+              <p className="text-xs text-slate-400 mt-1">Recorded in Supabase database</p>
+            </div>
+          </div>
+
+          {/* Two Columns: Assigned Projects + Daily Tasks Checklist */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Left: Assigned Projects Grid */}
+            <div className="lg:col-span-7 space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-bold text-slate-900">Your Assigned Projects ({displayProjects.length})</h2>
+              </div>
+
+              {displayProjects.length > 0 ? (
+                <div className="space-y-3">
+                  {displayProjects.map((project) => (
+                    <div
+                      key={project.id}
+                      className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs transition hover:shadow-md hover:border-slate-300"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{project.client_name}</span>
+                          <h3 className="text-base font-bold text-slate-900 mt-0.5">{project.name}</h3>
+                          <p className="text-xs text-slate-500 mt-1 line-clamp-2">{project.description || 'Continuous project tracking.'}</p>
+                        </div>
+                        <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold text-blue-700 border border-blue-200 capitalize">
+                          {project.status.replace('_', ' ')}
+                        </span>
+                      </div>
+
+                      <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-xs">
+                        <span className="text-slate-500 flex items-center gap-1 text-[11px]">
+                          <Clock className="h-3.5 w-3.5 text-slate-400" /> Scheduled report: <strong>{project.scheduled_report_time || '5:00 PM'}</strong>
+                        </span>
+                        <button
+                          onClick={() => {
+                            setSelectedProjectId(project.id);
+                            setIsReportModalOpen(true);
+                          }}
+                          className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700"
+                        >
+                          <span>File Report</span>
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
+                  <p className="text-xs text-slate-500">No projects currently assigned. Contact administrator Muhammad Ashiq.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Right: Daily Checklist */}
+            <div className="lg:col-span-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-bold text-slate-900">Today's Action Checklist</h2>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs space-y-3">
                 {tasksState.map((task) => (
                   <div
                     key={task.id}
                     onClick={() => toggleTask(task.id)}
-                    className={`flex items-start gap-3 rounded-xl border p-3.5 cursor-pointer transition-all ${
-                      task.completed
-                        ? 'border-emerald-200 bg-emerald-50/40 text-slate-500'
-                        : 'border-slate-200 bg-white text-slate-800 hover:border-slate-300'
+                    className={`flex items-start gap-3 p-3 rounded-xl border transition cursor-pointer ${
+                      task.completed ? 'bg-slate-50 border-slate-200 opacity-60' : 'bg-white border-slate-200 hover:border-slate-300'
                     }`}
                   >
-                    <button className="mt-0.5 text-slate-400">
-                      {task.completed ? (
-                        <CheckSquare className="h-4 w-4 text-emerald-600" />
-                      ) : (
-                        <Square className="h-4 w-4 text-slate-300" />
-                      )}
+                    <button className="mt-0.5 text-blue-600 shrink-0">
+                      {task.completed ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4 text-slate-400" />}
                     </button>
                     <div className="flex-1">
-                      <p className={`text-xs font-medium ${task.completed ? 'line-through text-slate-400' : 'text-slate-900'}`}>
+                      <p className={`text-xs font-semibold ${task.completed ? 'line-through text-slate-400' : 'text-slate-800'}`}>
                         {task.text}
                       </p>
-                      <div className="mt-1 flex items-center gap-2 text-[10px]">
-                        <span className="text-slate-500 font-medium">{task.project}</span>
-                        <span className="text-slate-300">•</span>
-                        <span className={`font-semibold ${task.priority === 'High' ? 'text-rose-600' : 'text-amber-600'}`}>
-                          {task.priority} Priority
-                        </span>
-                      </div>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
-
-            {/* My Assigned Projects Cards */}
-            <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-xs">
-              <h2 className="text-base font-bold text-slate-900 mb-4">My Assigned Projects</h2>
-              {displayProjects.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {displayProjects.map((p) => (
-                    <div
-                      key={p.id}
-                      className="rounded-2xl border border-slate-200 p-4 bg-slate-50/50 hover:bg-white hover:border-blue-300 transition"
-                    >
-                      <div className="flex items-start justify-between">
-                        <h3 className="font-bold text-slate-900 text-xs">{p.name}</h3>
-                        <span className="rounded-full bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-0.5 capitalize">
-                          {p.status.replace('_', ' ')}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-500 mt-1">{p.description || p.client_name}</p>
-
-                      <div className="mt-3 flex items-center justify-between text-[11px] text-slate-600">
-                        <span>Daily Report Time:</span>
-                        <span className="font-bold text-slate-800">
-                          {p.scheduled_report_time ? p.scheduled_report_time.slice(0, 5) : '17:00'}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-slate-400 italic">No projects assigned to you yet by the administrator.</p>
-              )}
-            </div>
           </div>
 
-          {/* Right Column: Personal Statistics & Report History */}
-          <div className="lg:col-span-4 space-y-6">
-            {/* Personal Stats Widget */}
-            <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-xs space-y-4">
-              <h2 className="text-base font-bold text-slate-900">Personal Performance</h2>
-
-              {/* On-Time Rate Gauge */}
-              <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 text-center">
-                <p className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">Monthly On-Time Rate</p>
-                <div className="my-2 text-4xl font-black text-emerald-700">{onTimePct}%</div>
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-200/60 px-2.5 py-0.5 text-[10px] font-bold text-emerald-900">
-                  <CheckCircle2 className="h-3 w-3 text-emerald-700" /> Compliant Submissions
-                </span>
+          {/* Submissions History Table */}
+          <div className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs">
+            <h2 className="text-base font-bold text-slate-900 mb-4">Your Recent Daily Submissions in Supabase</h2>
+            {myReports.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                      <th className="pb-3 pr-4">Date</th>
+                      <th className="pb-3 px-4">Project</th>
+                      <th className="pb-3 px-4">Tasks Completed</th>
+                      <th className="pb-3 px-4">Hours</th>
+                      <th className="pb-3 pl-4">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {myReports.map((rep) => (
+                      <tr key={rep.id}>
+                        <td className="py-3 pr-4 font-mono text-slate-600">{rep.report_date}</td>
+                        <td className="py-3 px-4 font-bold text-slate-800">{rep.project_name}</td>
+                        <td className="py-3 px-4 max-w-sm text-slate-600 truncate">{rep.tasks_completed}</td>
+                        <td className="py-3 px-4 font-bold text-slate-900">{rep.time_spent_hours}h</td>
+                        <td className="py-3 pl-4">
+                          {rep.is_on_time ? (
+                            <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">
+                              On-Time
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-bold text-amber-700 border border-amber-200">
+                              Delayed
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-
-              {/* Total Hours Logged */}
-              <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4 text-center">
-                <p className="text-[11px] font-bold text-blue-800 uppercase tracking-wider">Total Hours Logged</p>
-                <div className="my-2 text-3xl font-black text-blue-800">{devUser.total_hours_logged || 0} hrs</div>
-                <p className="text-[10px] text-blue-600">Tracked across assigned deliverables</p>
+            ) : (
+              <div className="py-8 text-center text-xs text-slate-400 italic">
+                You haven't submitted any daily reports yet. Click "Submit Daily Work Report" above to file your first report.
               </div>
-
-              {/* Weekly Activity Heatmap */}
-              <div>
-                <p className="text-xs font-bold text-slate-700 mb-2 flex items-center justify-between">
-                  <span>Weekly Activity Heatmap</span>
-                  <span className="text-[10px] font-normal text-slate-400">M T W T F S S</span>
-                </p>
-                <div className="grid grid-cols-7 gap-1.5">
-                  {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, i) => (
-                    <div
-                      key={i}
-                      className={`h-7 rounded-lg flex items-center justify-center text-[10px] font-bold ${
-                        i < 5 ? 'bg-emerald-500 text-white shadow-2xs' : 'bg-slate-100 text-slate-400'
-                      }`}
-                    >
-                      {day}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Recent Report History */}
-            <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-xs">
-              <h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-1.5">
-                <FileText className="h-4 w-4 text-slate-500" /> Recent Report History
-              </h3>
-
-              {displayReports.length > 0 ? (
-                <div className="space-y-3">
-                  {displayReports.map((report) => (
-                    <div key={report.id} className="rounded-xl border border-slate-100 bg-slate-50/60 p-3 text-xs">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-slate-800 truncate max-w-[150px]">
-                          {report.project_name}
-                        </span>
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                            report.is_on_time ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                          }`}
-                        >
-                          {report.is_on_time ? 'Submitted' : 'Delayed'}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-500 mt-1 line-clamp-2">{report.tasks_completed}</p>
-                      <div className="mt-2 flex items-center justify-between text-[10px] text-slate-400">
-                        <span>{report.report_date}</span>
-                        <span>{report.time_spent_hours} hrs</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-slate-400 italic">No reports submitted yet today.</p>
-              )}
-            </div>
+            )}
           </div>
-        </div>
-      </main>
+        </main>
 
-      <WorkReportModal
-        isOpen={isReportModalOpen}
-        onClose={() => setIsReportModalOpen(false)}
-        defaultProjectId={selectedProjectId}
-      />
-    </div>
+        <WorkReportModal
+          isOpen={isReportModalOpen}
+          onClose={() => setIsReportModalOpen(false)}
+          defaultProjectId={selectedProjectId}
+        />
+
+        <AdminProfileModal
+          isOpen={isProfileModalOpen}
+          onClose={() => setIsProfileModalOpen(false)}
+        />
+      </div>
     </PaywallGate>
   );
 }

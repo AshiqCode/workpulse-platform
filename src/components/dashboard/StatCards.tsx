@@ -7,48 +7,50 @@ import { useApp } from '@/lib/auth-context';
 export function StatCards() {
   const { stats, projects, developers, workReports } = useApp();
 
-  const activeProjectsCount = projects.filter((p) => p.status !== 'completed').length || 14;
-  const devCount = developers.length || 18;
-  const reportsSubmitted = workReports.length || 16;
+  // Pure real data directly from Supabase collections
+  const activeProjectsCount = projects.filter((p) => p.status !== 'completed').length;
+  const devCount = developers.length;
+  const reportsSubmitted = workReports.length;
   const reportsExpected = devCount;
-  const completionRate = Math.round((reportsSubmitted / (reportsExpected || 1)) * 100);
+  const completionRate = reportsExpected > 0 ? Math.round((reportsSubmitted / reportsExpected) * 100) : 0;
+  const totalWeeklyHours = workReports.reduce((acc, r) => acc + (Number(r.time_spent_hours) || 0), 0);
 
   const cards = [
     {
       title: 'Active Projects',
       value: activeProjectsCount,
-      trend: `↑ ${stats.activeProjectsChangePct}%`,
-      trendColor: 'text-emerald-600',
-      trendBg: 'bg-emerald-50',
+      trend: activeProjectsCount > 0 ? `↑ ${activeProjectsCount} Active` : '0 Active',
+      trendColor: activeProjectsCount > 0 ? 'text-emerald-700' : 'text-slate-500',
+      trendBg: activeProjectsCount > 0 ? 'bg-emerald-50' : 'bg-slate-100',
       icon: ArrowUpRight,
-      subtext: 'vs last month',
+      subtext: 'live projects in pipeline',
     },
     {
       title: 'Assigned Developers',
       value: devCount,
-      trend: `${devCount} Active`,
-      trendColor: 'text-emerald-700',
-      trendBg: 'bg-emerald-50',
+      trend: devCount > 0 ? `${devCount} Active` : '0 Active',
+      trendColor: devCount > 0 ? 'text-emerald-700' : 'text-slate-500',
+      trendBg: devCount > 0 ? 'bg-emerald-50' : 'bg-slate-100',
       icon: CheckCircle2,
-      subtext: 'all accounted for',
+      subtext: 'active team roster',
     },
     {
       title: "Today's Reports Received",
       value: `${reportsSubmitted}/${reportsExpected}`,
       trend: `${completionRate}% Submitted`,
-      trendColor: 'text-blue-700',
-      trendBg: 'bg-blue-50',
+      trendColor: reportsSubmitted > 0 ? 'text-blue-700' : 'text-slate-500',
+      trendBg: reportsSubmitted > 0 ? 'bg-blue-50' : 'bg-slate-100',
       icon: RotateCw,
-      subtext: 'on-time compliance',
+      subtext: 'daily report compliance',
     },
     {
       title: 'Total Weekly Hours',
-      value: `${stats.totalWeeklyHours}h`,
-      trend: `+${stats.weeklyHoursChange}h vs Last Week`,
-      trendColor: 'text-emerald-700',
-      trendBg: 'bg-emerald-50',
+      value: `${totalWeeklyHours}h`,
+      trend: `+${totalWeeklyHours}h Logged`,
+      trendColor: totalWeeklyHours > 0 ? 'text-emerald-700' : 'text-slate-500',
+      trendBg: totalWeeklyHours > 0 ? 'bg-emerald-50' : 'bg-slate-100',
       icon: TrendingUp,
-      subtext: 'across team',
+      subtext: 'across entire team',
     },
   ];
 

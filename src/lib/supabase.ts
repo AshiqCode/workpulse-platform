@@ -1,12 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 import { Project, UserProfile, WorkReport, ProjectStatus } from '@/types';
-import { INITIAL_PROFILES, INITIAL_PROJECTS, INITIAL_WORK_LOGS } from './mock-data';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://xzdizzxghqijqkvriold.supabase.co';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh6ZGl6enhnaHFpanFrdnJpb2xkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3OTU0MDEsImV4cCI6MjA4NjM3MTQwMX0.mZyqMrukhUBXU-Nw2nQhWIRYoCDO336rZJDo0tj_b6Q';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+/**
+ * Fetch all projects along with assigned developer members from Supabase
+ */
 export async function getProjects(): Promise<Project[]> {
   try {
     const { data: projectsData, error: projError } = await supabase
@@ -50,16 +52,19 @@ export async function getProjects(): Promise<Project[]> {
       };
     });
   } catch (err) {
-    console.warn('Error fetching projects:', err);
+    console.warn('Error fetching projects from Supabase:', err);
     return [];
   }
 }
 
+/**
+ * Create a new project in Supabase and link members
+ */
 export async function createProject(projectData: {
   name: string;
   client_name: string;
   description: string;
-  deadline: string;
+  deadline?: string;
   scheduled_report_time: string;
   developer_ids: string[];
   status?: ProjectStatus;
@@ -72,7 +77,7 @@ export async function createProject(projectData: {
         name: projectData.name,
         client_name: projectData.client_name,
         description: projectData.description,
-        deadline: projectData.deadline,
+        deadline: projectData.deadline || null,
         scheduled_report_time: projectData.scheduled_report_time || '17:00:00',
         status: projectData.status || 'in_progress',
         progress_pct: projectData.progress_pct || 0,
@@ -99,6 +104,9 @@ export async function createProject(projectData: {
   }
 }
 
+/**
+ * Update project in Supabase
+ */
 export async function updateProject(
   id: string,
   updates: Partial<Project>
@@ -138,6 +146,9 @@ export async function updateProject(
   }
 }
 
+/**
+ * Update project status in Supabase
+ */
 export async function updateProjectStatus(
   id: string,
   status: ProjectStatus
@@ -156,8 +167,15 @@ export async function updateProjectStatus(
   }
 }
 
+/**
+ * Delete project in Supabase
+ */
 export async function deleteProject(id: string): Promise<{ success: boolean; error?: string }> {
   try {
+    // Delete members & reports first
+    await supabase.from('workpulse_project_members').delete().eq('project_id', id);
+    await supabase.from('workpulse_work_reports').delete().eq('project_id', id);
+
     const { error } = await supabase.from('workpulse_projects').delete().eq('id', id);
     if (error) throw error;
     return { success: true };
@@ -167,16 +185,36 @@ export async function deleteProject(id: string): Promise<{ success: boolean; err
   }
 }
 
+/**
+ * Fetch all profiles (admin + developers) from Supabase
+ */
+export async function getAllProfiles(): Promise<UserProfile[]> {
+  try {
+    const { data, error } = await supabase
+      .from('workpulse_profiles')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    if (error || !data) return [];
+    return data;
+  } catch (err) {
+    console.warn('Error fetching profiles from Supabase:', err);
+    return [];
+  }
+}
+
+/**
+ * Fetch developers only from Supabase
+ */
 export async function getDevelopers(): Promise<UserProfile[]> {
   try {
     const { data, error } = await supabase
       .from('workpulse_profiles')
       .select('*')
-      .eq('role', 'developer');
+      .eq('role', 'developer')
+      .order('created_at', { ascending: false });
 
-    if (error || !data) {
-      return [];
-    }
+    if (error || !data) return [];
     return data;
   } catch (err) {
     console.warn('Error fetching developers:', err);
@@ -184,6 +222,130 @@ export async function getDevelopers(): Promise<UserProfile[]> {
   }
 }
 
+/**
+ * Fetch admin profile from Supabase
+ */
+export async function getAdminProfile(): Promise<UserProfile | null> {
+  try {
+    const { data, error } = await supabase
+      .from('workpulse_profiles')
+      .select('*')
+      .eq('role', 'admin')
+      .single();
+
+    if (error || !data) return null;
+    return data;
+  } catch (err) {
+    console.warn('Error fetching admin profile:', err);
+    return null;
+  }
+}
+
+/**
+ * Update any profile (name, avatar_url, bio, company, password) in Supabase
+ */
+export async function updateProfileInDb(
+  id: string,
+  updates: Partial<UserProfile>
+): Promise<{ success: boolean; profile?: UserProfile; error?: string }> {
+  try {
+    const { data, error } = await supabase
+      .from('workpulse_profiles')
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { success: true, profile: data };
+  } catch (err: any) {
+    console.error('Error updating profile in Supabase:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Create developer profile in Supabase (with assigned password)
+ */
+export async function createDeveloperProfile(dev: {
+  email: string;
+  full_name: string;
+  password?: string;
+  avatar_url?: string;
+  initial_project_id?: string;
+}): Promise<{ success: boolean; profile?: UserProfile; error?: string }> {
+  try {
+    // Check if exists
+    const { data: existing } = await supabase
+      .from('workpulse_profiles')
+      .select('*')
+      .eq('email', dev.email.toLowerCase())
+      .single();
+
+    if (existing) {
+      // Update with new password if supplied
+      const { data: updated, error: uErr } = await supabase
+        .from('workpulse_profiles')
+        .update({
+          full_name: dev.full_name,
+          password: dev.password || existing.password,
+          is_invited: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id)
+        .select()
+        .single();
+
+      if (uErr) throw uErr;
+
+      if (dev.initial_project_id) {
+        await supabase.from('workpulse_project_members').upsert({
+          project_id: dev.initial_project_id,
+          developer_id: existing.id,
+          role_in_project: 'Developer',
+        });
+      }
+
+      return { success: true, profile: updated };
+    }
+
+    const { data: inserted, error: iErr } = await supabase
+      .from('workpulse_profiles')
+      .insert({
+        email: dev.email.toLowerCase(),
+        full_name: dev.full_name,
+        role: 'developer',
+        avatar_url: dev.avatar_url || null,
+        password: dev.password || 'dev123',
+        is_invited: true,
+        is_paid_admin: false,
+      })
+      .select()
+      .single();
+
+    if (iErr) throw iErr;
+
+    if (dev.initial_project_id && inserted) {
+      await supabase.from('workpulse_project_members').insert({
+        project_id: dev.initial_project_id,
+        developer_id: inserted.id,
+        role_in_project: 'Developer',
+      });
+    }
+
+    return { success: true, profile: inserted };
+  } catch (err: any) {
+    console.error('Error creating developer profile in Supabase:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Fetch all work reports from Supabase
+ */
 export async function getWorkReports(): Promise<WorkReport[]> {
   try {
     const { data, error } = await supabase
@@ -207,24 +369,27 @@ export async function getWorkReports(): Promise<WorkReport[]> {
       developer_id: r.developer_id,
       developer_name: r.developer?.full_name || 'Developer',
       developer_email: r.developer?.email,
-      developer_avatar: r.developer?.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
+      developer_avatar: r.developer?.avatar_url || null,
       report_date: r.report_date,
       scheduled_time: r.scheduled_time || '5:00 PM PST',
       submitted_at: new Date(r.submitted_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       is_on_time: r.is_on_time,
       tasks_completed: r.tasks_completed,
-      time_spent_hours: Number(r.time_spent_hours),
+      time_spent_hours: Number(r.time_spent_hours || 0),
       pr_commit_links: r.pr_commit_links,
       blockers: r.blockers,
       tomorrow_plan: r.tomorrow_plan,
       status: r.status,
     }));
   } catch (err) {
-    console.warn('Error fetching work logs:', err);
+    console.warn('Error fetching work logs from Supabase:', err);
     return [];
   }
 }
 
+/**
+ * Submit work report to Supabase
+ */
 export async function submitWorkReport(reportData: {
   project_id: string;
   developer_id: string;
@@ -248,10 +413,11 @@ export async function submitWorkReport(reportData: {
         developer_id: reportData.developer_id,
         tasks_completed: reportData.tasks_completed,
         time_spent_hours: reportData.time_spent_hours,
-        pr_commit_links: reportData.pr_commit_links,
+        pr_commit_links: reportData.pr_commit_links || null,
         blockers: reportData.blockers || 'None',
-        tomorrow_plan: reportData.tomorrow_plan,
+        tomorrow_plan: reportData.tomorrow_plan || null,
         scheduled_time: reportData.scheduled_time || '17:00:00',
+        report_date: now.toISOString().split('T')[0],
         submitted_at: now.toISOString(),
         is_on_time: is_on_time,
         status: is_on_time ? 'submitted' : 'delayed',
@@ -262,7 +428,40 @@ export async function submitWorkReport(reportData: {
     if (error) throw error;
     return { success: true, data };
   } catch (err: any) {
-    console.error('Error submitting work report:', err);
+    console.error('Error submitting work report to Supabase:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Upload image to Supabase Storage ('profile-pics' bucket)
+ */
+export async function uploadProfilePicture(
+  file: File,
+  userId: string
+): Promise<{ success: boolean; publicUrl?: string; error?: string }> {
+  try {
+    const ext = file.name.split('.').pop() || 'png';
+    const filePath = `avatars/${userId}-${Date.now()}.${ext}`;
+
+    const { error: uploadErr } = await supabase.storage
+      .from('profile-pics')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: true,
+      });
+
+    if (uploadErr) {
+      throw uploadErr;
+    }
+
+    const { data: publicData } = supabase.storage
+      .from('profile-pics')
+      .getPublicUrl(filePath);
+
+    return { success: true, publicUrl: publicData.publicUrl };
+  } catch (err: any) {
+    console.error('Error uploading avatar to Supabase Storage:', err);
     return { success: false, error: err.message };
   }
 }
