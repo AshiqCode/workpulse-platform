@@ -123,11 +123,47 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, [projects, workReports, developers]);
 
-  // Login handler against Supabase data
+  // Unified direct login handler: Checks Supabase database status (Admin vs Developer) dynamically
   const login = async (email: string, password: string): Promise<AuthResult> => {
     const cleanEmail = email.trim().toLowerCase();
 
-    // 1. Admin Login Check
+    // Fetch all real profiles from Supabase to dynamically check role & status
+    const allProfiles = await getAllProfiles();
+    const matchedProfile = allProfiles.find(
+      (p) => p.email.toLowerCase() === cleanEmail
+    );
+
+    // 1. If user is found in Supabase database
+    if (matchedProfile) {
+      // Check password
+      const expectedPassword = matchedProfile.password || (matchedProfile.role === 'admin' ? 'krazy8' : '');
+      
+      // If admin and default password fallback
+      const isPasswordValid =
+        password === expectedPassword ||
+        (matchedProfile.role === 'admin' && (password === 'krazy8' || password === adminProfile.password));
+
+      if (!isPasswordValid) {
+        return {
+          success: false,
+          error: `Incorrect password for ${matchedProfile.role === 'admin' ? 'Administrator' : 'Developer'} account.`,
+        };
+      }
+
+      // Check role status
+      if (matchedProfile.role === 'admin') {
+        const adminUser = { ...matchedProfile, role: 'admin' as const };
+        setAdminProfile(adminUser);
+        setCurrentUser(adminUser);
+        return { success: true, role: 'admin', user: adminUser };
+      } else {
+        const devUser = { ...matchedProfile, role: 'developer' as const };
+        setCurrentUser(devUser);
+        return { success: true, role: 'developer', user: devUser };
+      }
+    }
+
+    // 2. Fallback check for default primary admin if database is initializing
     if (cleanEmail === 'muhammadashiq.dev@gmail.com') {
       const adminPass = adminProfile.password || 'krazy8';
       if (password === 'krazy8' || password === adminPass) {
@@ -139,61 +175,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    // 2. Developer Login Check from Supabase database
-    const allProfiles = await getAllProfiles();
-    const existingDev = allProfiles.find(
-      (d) => d.email.toLowerCase() === cleanEmail && d.role === 'developer'
-    );
-
-    if (!existingDev) {
-      return {
-        success: false,
-        error:
-          'Access Denied: You must be invited by Administrator Muhammad Ashiq (muhammadashiq.dev@gmail.com) to access the developer portal.',
-      };
-    }
-
-    // Verify password if set
-    if (existingDev.password && existingDev.password !== password) {
-      return {
-        success: false,
-        error: 'Incorrect developer password. Please check the invitation email.',
-      };
-    }
-
-    setCurrentUser(existingDev);
-    return { success: true, role: 'developer', user: existingDev };
+    // 3. User does not exist in Supabase
+    return {
+      success: false,
+      error:
+        'Account Not Found: No account exists with this email. Developers must be invited by the Administrator (muhammadashiq.dev@gmail.com).',
+    };
   };
 
   const signup = async (email: string, password: string, fullName: string): Promise<AuthResult> => {
-    const cleanEmail = email.trim().toLowerCase();
-
-    if (cleanEmail === 'muhammadashiq.dev@gmail.com') {
-      const updated = { ...adminProfile, full_name: fullName, password };
-      await updateProfileInDb(adminProfile.id, { full_name: fullName, password });
-      setAdminProfile(updated);
-      setCurrentUser(updated);
-      return { success: true, role: 'admin', user: updated };
-    }
-
-    // Developer must already have an invitation
-    const allProfiles = await getAllProfiles();
-    const existingDev = allProfiles.find((d) => d.email.toLowerCase() === cleanEmail);
-
-    if (!existingDev) {
-      return {
-        success: false,
-        error:
-          'Registration Denied: This email has not been invited by Administrator Muhammad Ashiq. Please request an invitation from the admin.',
-      };
-    }
-
-    // Update the profile with new password & name
-    await updateProfileInDb(existingDev.id, { full_name: fullName, password });
-    const updatedDev = { ...existingDev, full_name: fullName, password };
-    setCurrentUser(updatedDev);
-    await refreshData();
-    return { success: true, role: 'developer', user: updatedDev };
+    return login(email, password);
   };
 
   const logout = () => {
