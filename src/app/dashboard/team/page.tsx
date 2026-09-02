@@ -14,6 +14,7 @@ export default function TeamPage() {
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleDelete = async (devId: string, devName: string) => {
     setDeleteError(null);
@@ -35,14 +36,17 @@ export default function TeamPage() {
   return (
     <PaywallGate requiredRole="admin">
       <div className="min-h-screen bg-[#F8FAFC]">
-        <Sidebar />
-        <div className="pl-64">
-          <Navbar onOpenInviteModal={() => setIsInviteOpen(true)} />
+        <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
+        <div className="lg:pl-64 flex flex-col min-h-screen">
+          <Navbar
+            onOpenInviteModal={() => setIsInviteOpen(true)}
+            onOpenMobileMenu={() => setMobileMenuOpen(true)}
+          />
 
-          <main className="p-8 space-y-6 max-w-[1600px] mx-auto">
-            <div className="flex items-center justify-between">
+          <main className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-[1600px] w-full mx-auto flex-1">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h1 className="text-2xl font-black tracking-tight text-slate-900">Team Structure & Permissions</h1>
+                <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">Team Structure & Permissions</h1>
                 <p className="text-xs font-medium text-slate-500 mt-1">
                   Manage invited developers and review role permissions.
                 </p>
@@ -50,7 +54,7 @@ export default function TeamPage() {
 
               <button
                 onClick={() => setIsInviteOpen(true)}
-                className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 transition"
+                className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 transition"
               >
                 <UserPlus className="h-4 w-4" />
                 <span>+ Invite Developer</span>
@@ -64,26 +68,26 @@ export default function TeamPage() {
               </div>
             )}
 
-            <div className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs">
+            <div className="rounded-3xl border border-slate-200/90 bg-white p-5 sm:p-7 shadow-xs">
               <h2 className="text-base font-bold text-slate-900 mb-4">Active Team Members ({developers.length + 1})</h2>
 
               <div className="divide-y divide-slate-100">
                 {/* Admin Muhammad Ashiq */}
-                <div className="flex items-center justify-between py-3.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-4">
                   <div className="flex items-center gap-3">
                     <UserAvatar
                       avatarUrl={adminProfile.avatar_url}
                       name={adminProfile.full_name}
                       email={adminProfile.email}
-                      sizeClassName="h-10 w-10"
-                      className="border-2 border-blue-500 shadow-xs"
+                      sizeClassName="h-10 w-10 sm:h-11 sm:w-11"
+                      className="border-2 border-blue-500 shadow-xs shrink-0"
                     />
                     <div>
                       <p className="text-xs font-bold text-slate-900">{adminProfile.full_name} (Owner)</p>
                       <p className="text-[11px] text-slate-500">{adminProfile.email}</p>
                     </div>
                   </div>
-                  <span className="rounded-full bg-blue-50 border border-blue-200 px-3 py-0.5 text-[11px] font-bold text-blue-800">
+                  <span className="self-start sm:self-auto rounded-full bg-blue-50 border border-blue-200 px-3 py-0.5 text-[11px] font-bold text-blue-800">
                     Administrator
                   </span>
                 </div>
@@ -92,27 +96,28 @@ export default function TeamPage() {
                 {developers.map((dev) => {
                   const isAssigned = projects.some((p) => (p.assigned_dev_ids || []).includes(dev.id));
                   return (
-                    <div key={dev.id} className="flex items-center justify-between py-3.5">
+                    <div key={dev.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-4">
                       <div className="flex items-center gap-3">
                         <UserAvatar
                           avatarUrl={dev.avatar_url}
                           name={dev.full_name}
                           email={dev.email}
-                          sizeClassName="h-10 w-10"
+                          sizeClassName="h-10 w-10 sm:h-11 sm:w-11"
+                          className="shrink-0"
                         />
                         <div>
                           <p className="text-xs font-bold text-slate-900">{dev.full_name}</p>
                           <p className="text-[11px] text-slate-500">{dev.email}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 self-end sm:self-auto">
                         <span className="rounded-full bg-emerald-50 border border-emerald-200 px-3 py-0.5 text-[11px] font-bold text-emerald-700">
                           Invited Developer
                         </span>
                         <button
                           onClick={() => handleDelete(dev.id, dev.full_name)}
                           disabled={deletingId === dev.id}
-                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
                           title={isAssigned ? 'Assigned to project(s). Remove from projects first to delete.' : 'Delete developer'}
                         >
                           <Trash2 className="h-4 w-4" />

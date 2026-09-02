@@ -18,43 +18,45 @@ export default function AdminDashboardPage() {
   const { projects } = useApp();
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [isProjectOpen, setIsProjectOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <PaywallGate requiredRole="admin">
       <div className="min-h-screen bg-[#F8FAFC]">
-        {/* Fixed Left Sidebar */}
-        <Sidebar />
+        {/* Responsive Left Sidebar */}
+        <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
 
         {/* Main Content Area */}
-        <div className="pl-64">
+        <div className="lg:pl-64 flex flex-col min-h-screen">
           {/* Sticky Top Navbar */}
           <Navbar
             onOpenInviteModal={() => setIsInviteOpen(true)}
             onOpenProjectModal={() => setIsProjectOpen(true)}
+            onOpenMobileMenu={() => setMobileMenuOpen(true)}
           />
 
           {/* Dashboard Main View */}
-          <main className="p-8 space-y-8 max-w-[1600px] mx-auto">
+          <main className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-[1600px] w-full mx-auto flex-1">
             {/* Page Heading */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h1 className="text-2xl font-black tracking-tight text-slate-900">Dashboard</h1>
+                <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">Dashboard</h1>
                 <p className="text-xs font-medium text-slate-500 mt-1">
                   Real-time team execution, daily report compliance, and project velocity.
                 </p>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
                 <button
                   onClick={() => setIsInviteOpen(true)}
-                  className="hidden sm:flex items-center gap-1.5 rounded-xl border border-emerald-600 bg-emerald-50 px-4 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 transition"
+                  className="flex items-center gap-1.5 rounded-xl border border-emerald-600 bg-emerald-50 px-3 sm:px-4 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 transition"
                 >
                   <Users className="h-4 w-4" />
-                  <span>+ Invite Developer</span>
+                  <span>+ Invite Dev</span>
                 </button>
                 <button
                   onClick={() => setIsProjectOpen(true)}
-                  className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm shadow-blue-600/20 hover:bg-blue-700 transition"
+                  className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 sm:px-4 py-2 text-xs font-bold text-white shadow-sm shadow-blue-600/20 hover:bg-blue-700 transition"
                 >
                   <Plus className="h-4 w-4" />
                   <span>+ New Project</span>
@@ -68,26 +70,26 @@ export default function AdminDashboardPage() {
             {/* Section 2: Modern Project Cards Grid */}
             <section className="space-y-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-bold text-slate-900">Projects Overview (CRUD)</h2>
+                <h2 className="text-base sm:text-lg font-bold text-slate-900">Projects Overview (CRUD)</h2>
                 {projects.length > 0 && (
                   <Link
                     href="/dashboard/projects"
                     className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700"
                   >
-                    <span>View all projects ({projects.length})</span>
+                    <span>View all ({projects.length})</span>
                     <ArrowUpRight className="h-3.5 w-3.5" />
                   </Link>
                 )}
               </div>
 
               {projects.length > 0 ? (
-                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid grid-cols-1 gap-4 sm:gap-5 sm:grid-cols-2 lg:grid-cols-4">
                   {projects.slice(0, 4).map((project) => (
                     <ProjectCard key={project.id} project={project} />
                   ))}
                 </div>
               ) : (
-                <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center">
+                <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 sm:p-12 text-center">
                   <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 mb-3">
                     <FolderPlus className="h-6 w-6" />
                   </div>

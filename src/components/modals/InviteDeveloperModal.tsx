@@ -17,6 +17,8 @@ export function InviteDeveloperModal({ isOpen, onClose }: InviteDeveloperModalPr
   const [selectedProjectId, setSelectedProjectId] = useState(projects[0]?.id || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSent, setIsSent] = useState(false);
+  const [emailDelivered, setEmailDelivered] = useState(false);
+  const [emailErrorNote, setEmailErrorNote] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -50,19 +52,37 @@ export function InviteDeveloperModal({ isOpen, onClose }: InviteDeveloperModalPr
     setIsSubmitting(false);
 
     if (res.success) {
-      setStatusMessage(res.message || 'Developer created and invitation email dispatched!');
+      const delivered = res.emailSent !== false;
+      setEmailDelivered(delivered);
+      setEmailErrorNote(res.emailError || '');
+      setStatusMessage(
+        res.message ||
+          (delivered
+            ? `Invitation email sent to ${email}.`
+            : 'Developer created, but the email could not be delivered.')
+      );
       setIsSent(true);
-      setTimeout(() => {
-        setIsSent(false);
-        setEmail('');
-        setFullName('');
-        setPassword('');
-        setStatusMessage('');
-        onClose();
-      }, 2500);
+      // Auto-close only on a real delivery. If email failed, keep the panel open
+      // so the admin can copy the credentials to share them manually.
+      if (delivered) {
+        setTimeout(() => {
+          resetForm();
+          onClose();
+        }, 2500);
+      }
     } else {
       setErrorMessage(res.error || 'Failed to send invitation.');
     }
+  };
+
+  const resetForm = () => {
+    setIsSent(false);
+    setEmailDelivered(false);
+    setEmailErrorNote('');
+    setEmail('');
+    setFullName('');
+    setPassword('');
+    setStatusMessage('');
   };
 
   return (
@@ -87,18 +107,51 @@ export function InviteDeveloperModal({ isOpen, onClose }: InviteDeveloperModalPr
         </div>
 
         {isSent ? (
-          <div className="py-10 text-center animate-in fade-in zoom-in space-y-3">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 shadow-xs">
-              <Check className="h-8 w-8" />
-            </div>
-            <h4 className="text-base font-bold text-slate-900">Invitation Dispatched!</h4>
+          <div className="py-8 text-center animate-in fade-in zoom-in space-y-3">
+            {emailDelivered ? (
+              <>
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 shadow-xs">
+                  <Check className="h-8 w-8" />
+                </div>
+                <h4 className="text-base font-bold text-slate-900">Invitation Email Sent!</h4>
+              </>
+            ) : (
+              <>
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 text-amber-600 shadow-xs">
+                  <AlertCircle className="h-8 w-8" />
+                </div>
+                <h4 className="text-base font-bold text-slate-900">Developer Created — Email Not Delivered</h4>
+              </>
+            )}
             <p className="text-xs text-slate-600 max-w-xs mx-auto">
               {statusMessage}
             </p>
+
+            {!emailDelivered && emailErrorNote && (
+              <div className="mx-auto max-w-xs rounded-xl bg-amber-50 border border-amber-200 p-3 text-left text-[11px] text-amber-800">
+                <p className="font-bold">Reason from Resend:</p>
+                <p className="mt-0.5">{emailErrorNote}</p>
+                <p className="mt-1.5 text-amber-700">Share the credentials below with the developer manually, or verify a domain in Resend to enable delivery to any address.</p>
+              </div>
+            )}
+
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-left text-xs font-mono text-slate-700">
               <p><span className="text-slate-400">Email:</span> {email}</p>
               <p><span className="text-slate-400">Assigned Password:</span> <strong className="text-emerald-700">{password}</strong></p>
             </div>
+
+            {!emailDelivered && (
+              <button
+                type="button"
+                onClick={() => {
+                  resetForm();
+                  onClose();
+                }}
+                className="rounded-lg bg-slate-800 px-4 py-2 text-xs font-bold text-white hover:bg-slate-900 transition"
+              >
+                Done
+              </button>
+            )}
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="mt-4 space-y-4 text-xs">

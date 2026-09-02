@@ -49,7 +49,7 @@ interface AppContextType {
   updateProject: (id: string, updates: Partial<Project>) => Promise<boolean>;
   updateProjectStatus: (id: string, status: ProjectStatus) => Promise<boolean>;
   deleteProject: (id: string) => Promise<boolean>;
-  inviteDeveloper: (email: string, fullName: string, password?: string, projectId?: string) => Promise<{ success: boolean; message?: string; error?: string }>;
+  inviteDeveloper: (email: string, fullName: string, password?: string, projectId?: string) => Promise<{ success: boolean; message?: string; error?: string; emailSent?: boolean; emailError?: string | null }>;
   deleteDeveloper: (id: string) => Promise<{ success: boolean; error?: string }>;
   submitReport: (report: Omit<WorkReport, 'id' | 'report_date' | 'submitted_at' | 'status' | 'is_on_time'>) => Promise<boolean>;
 }
@@ -305,7 +305,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     fullName: string,
     password?: string,
     projectId?: string
-  ): Promise<{ success: boolean; message?: string; error?: string }> => {
+  ): Promise<{ success: boolean; message?: string; error?: string; emailSent?: boolean; emailError?: string | null }> => {
     try {
       const cleanEmail = email.trim().toLowerCase();
       const devPassword = password || 'dev' + Math.random().toString(36).substring(2, 6);
@@ -327,7 +327,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       await refreshData();
-      return { success: true, message: data.message };
+      return { success: true, message: data.message, emailSent: data.emailSent, emailError: data.emailError };
     } catch (err: any) {
       console.error('Error in inviteDeveloper:', err);
       return { success: false, error: err?.message || 'Network error sending invite.' };

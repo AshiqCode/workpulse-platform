@@ -13,7 +13,14 @@ interface WorkReportModalProps {
 
 export function WorkReportModal({ isOpen, onClose, defaultProjectId }: WorkReportModalProps) {
   const { projects, submitReport, currentUser } = useApp();
-  const [selectedProjectId, setSelectedProjectId] = useState(defaultProjectId || projects[0]?.id || '');
+  // Developers may only report on projects assigned to them; admins can pick any.
+  const reportableProjects =
+    currentUser && currentUser.role !== 'admin'
+      ? projects.filter((p) => (p.assigned_dev_ids || []).includes(currentUser.id))
+      : projects;
+  const [selectedProjectId, setSelectedProjectId] = useState(
+    defaultProjectId || reportableProjects[0]?.id || ''
+  );
   const [tasksCompleted, setTasksCompleted] = useState('');
   const [timeSpentHours, setTimeSpentHours] = useState('4.5');
   const [prLinks, setPrLinks] = useState('');
@@ -110,7 +117,10 @@ export function WorkReportModal({ isOpen, onClose, defaultProjectId }: WorkRepor
                 required
                 className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50/70 px-3 text-slate-800 text-xs focus:border-blue-600 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100 font-semibold"
               >
-                {projects.map((p) => (
+                {reportableProjects.length === 0 && (
+                  <option value="">No projects assigned to you yet</option>
+                )}
+                {reportableProjects.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name} ({p.client_name}) - Deadline: {p.scheduled_report_time}
                   </option>
